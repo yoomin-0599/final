@@ -1,0 +1,53 @@
+#!/bin/bash
+
+echo "======================================"
+echo "News IT's Issue - Deployment Script"
+echo "======================================"
+
+# Backend deployment
+echo ""
+echo "1. Backend Deployment (Render.com)"
+echo "-----------------------------------"
+echo "Backend is configured for Render.com deployment."
+echo "Push to GitHub and Render will automatically deploy."
+echo ""
+echo "Backend URL: https://streamlit-04.onrender.com"
+echo ""
+
+# Frontend deployment
+echo "2. Frontend Deployment Options"
+echo "-------------------------------"
+echo ""
+echo "Option A: Vercel"
+echo "  cd frontend/news-app"
+echo "  npm run build"
+echo "  npx vercel --prod"
+echo ""
+echo "Option B: Netlify"
+echo "  cd frontend/news-app"
+echo "  npm run build"
+echo "  # Drag and drop 'dist' folder to Netlify"
+echo ""
+echo "Option C: GitHub Pages"
+echo "  cd frontend/news-app"
+echo "  npm run build"
+echo "  npx gh-pages -d dist"
+echo ""
+
+# Local testing
+echo "3. Local Testing"
+echo "----------------"
+echo "Backend:"
+echo "  cd backend"
+echo "  pip install -r requirements.txt"
+echo "  uvicorn main:app --reload"
+echo ""
+echo "Frontend:"
+echo "  cd frontend/news-app"
+echo "  npm install"
+echo "  npm run dev"
+echo ""
+
+echo "======================================"
+echo "Deployment script complete!"
+echo "======================================" 
