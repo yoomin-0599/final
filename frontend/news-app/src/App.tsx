@@ -54,10 +54,11 @@ import {
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 
-import { newsService } from './services/newsService';
-import type { Article, KeywordStats } from './services/newsService';
+import { newsApi } from './api/newsApi';
+import type { Article, KeywordStats } from './api/newsApi';
 import { KeywordCloud } from './components/KeywordCloud';
 import { KeywordNetwork } from './components/KeywordNetwork';
+import { ColorPalette } from './components/ColorPalette';
 import { useThemeProvider } from './hooks/useTheme';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { calculateReadingTime, formatReadingTime } from './utils/readingTime';
@@ -82,6 +83,37 @@ function TabPanel(props: TabPanelProps) {
 interface ArticleCardProps {
   article: Article;
   onToggleFavorite: (id: number) => void;
+}
+
+// 키워드 네트워크 컨테이너 컴포넌트
+function KeywordNetworkContainer() {
+  const [networkData, setNetworkData] = useState<any>({ nodes: [], edges: [] });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadNetworkData = async () => {
+      try {
+        const data = await newsApi.getKeywordNetwork();
+        setNetworkData(data);
+      } catch (error) {
+        console.error('Failed to load network data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadNetworkData();
+  }, []);
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 400 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  return <KeywordNetwork data={networkData} />;
 }
 
 function ArticleCard({ article, onToggleFavorite }: ArticleCardProps) {
@@ -157,39 +189,52 @@ function ArticleCard({ article, onToggleFavorite }: ArticleCardProps) {
               </Typography>
             )}
 
-            {article.keywords && article.keywords.length > 0 && (
+            {article.keywords && (
               <Box sx={{ mt: 2 }}>
                 <Typography variant="body2" component="div" sx={{ mb: 1, fontWeight: 600 }}>
                   🏷️ 키워드
                 </Typography>
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                  {article.keywords.slice(0, 8).map((keyword, index) => (
-                    <Chip 
-                      key={index} 
-                      label={keyword} 
-                      size="small"
-                      variant="outlined"
-                      sx={{ 
-                        fontSize: '0.75rem',
-                        height: 24,
-                        borderRadius: 3,
-                        '&:hover': {
-                          backgroundColor: 'primary.main',
-                          color: 'primary.contrastText',
-                          borderColor: 'primary.main'
-                        }
-                      }} 
-                    />
-                  ))}
-                  {article.keywords.length > 8 && (
-                    <Chip 
-                      label={`+${article.keywords.length - 8}`}
-                      size="small"
-                      variant="filled"
-                      color="default"
-                      sx={{ fontSize: '0.75rem', height: 24 }}
-                    />
-                  )}
+                  {typeof article.keywords === 'string' 
+                    ? article.keywords.split(',').slice(0, 8).map((keyword: string, index: number) => (
+                        <Chip 
+                          key={index} 
+                          label={keyword.trim()} 
+                          size="small"
+                          variant="outlined"
+                          sx={{ 
+                            fontSize: '0.75rem',
+                            height: 24,
+                            borderRadius: 3,
+                            '&:hover': {
+                              backgroundColor: 'primary.main',
+                              color: 'primary.contrastText',
+                              borderColor: 'primary.main'
+                            }
+                          }} 
+                        />
+                      ))
+                    : Array.isArray(article.keywords) 
+                      ? article.keywords.slice(0, 8).map((keyword: string, index: number) => (
+                          <Chip 
+                            key={index} 
+                            label={keyword} 
+                            size="small"
+                            variant="outlined"
+                            sx={{ 
+                              fontSize: '0.75rem',
+                              height: 24,
+                              borderRadius: 3,
+                              '&:hover': {
+                                backgroundColor: 'primary.main',
+                                color: 'primary.contrastText',
+                                borderColor: 'primary.main'
+                              }
+                            }} 
+                          />
+                        ))
+                      : null
+                  }
                 </Box>
               </Box>
             )}
@@ -241,7 +286,7 @@ function KeyboardShortcutsHelp() {
 
 // 메인 App 컴포넌트
 export default function App() {
-  const { isDarkMode, toggleTheme, theme, ThemeContext } = useThemeProvider();
+  const { isDarkMode, toggleTheme, theme, colors, ThemeContext } = useThemeProvider();
   const [tabValue, setTabValue] = useState(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [articles, setArticles] = useState<Article[]>([]);
@@ -267,7 +312,7 @@ export default function App() {
   
   // 사이드바 - 데스크톱에서는 항상 고정
   const [drawerOpen, setDrawerOpen] = useState(true);
-  const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
+  const [showShortcutsHelp] = useState(false);
   const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 1024);
 
   // 화면 크기 감지
@@ -294,15 +339,10 @@ export default function App() {
     const loadInitialData = async () => {
       setLoading(true);
       try {
-        // 기존에 수집된 데이터가 있는지 확인
-        const existingArticles = newsService.getFilteredArticles({});
-        if (existingArticles.length === 0) {
-          // 데이터가 없으면 자동으로 수집
-          await collectNews();
-        } else {
-          setArticles(existingArticles);
-          updateKeywordStats();
-        }
+        const articlesData = await newsApi.getArticles({ limit: 100 });
+        setArticles(articlesData);
+        const keywordStatsData = await newsApi.getKeywordStats();
+        setKeywordStats(keywordStatsData);
       } catch (error) {
         console.error('Failed to load initial data:', error);
       } finally {
@@ -315,13 +355,42 @@ export default function App() {
 
   // 필터 적용
   useEffect(() => {
-    const filtered = newsService.getFilteredArticles({
-      search: searchTerm,
-      source: selectedSource === 'all' ? undefined : selectedSource,
-      dateFrom: new Date(dateFrom),
-      dateTo: new Date(dateTo),
-      favoritesOnly,
-    });
+    let filtered = [...articles];
+
+    if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase();
+      filtered = filtered.filter(article => 
+        article.title?.toLowerCase().includes(searchLower) ||
+        article.summary?.toLowerCase().includes(searchLower) ||
+        article.keywords?.toLowerCase().includes(searchLower)
+      );
+    }
+
+    if (selectedSource && selectedSource !== 'all') {
+      filtered = filtered.filter(article => article.source === selectedSource);
+    }
+
+    if (dateFrom) {
+      filtered = filtered.filter(article => 
+        new Date(article.published) >= new Date(dateFrom)
+      );
+    }
+
+    if (dateTo) {
+      filtered = filtered.filter(article => 
+        new Date(article.published) <= new Date(dateTo)
+      );
+    }
+
+    if (favoritesOnly) {
+      filtered = filtered.filter(article => article.is_favorite);
+    }
+
+    // Sort by published date (newest first)
+    filtered.sort((a, b) => 
+      new Date(b.published).getTime() - new Date(a.published).getTime()
+    );
+
     setFilteredArticles(filtered);
     setCurrentPage(1);
   }, [articles, searchTerm, selectedSource, dateFrom, dateTo, favoritesOnly]);
@@ -330,9 +399,12 @@ export default function App() {
   const collectNews = async () => {
     setCollecting(true);
     try {
-      const newArticles = await newsService.collectNews();
-      setArticles(newArticles);
-      updateKeywordStats();
+      await newsApi.collectNews();
+      // 수집 후 데이터 다시 로드
+      const articlesData = await newsApi.getArticles({ limit: 100 });
+      setArticles(articlesData);
+      const keywordStatsData = await newsApi.getKeywordStats();
+      setKeywordStats(keywordStatsData);
     } catch (error) {
       console.error('Failed to collect news:', error);
     } finally {
@@ -340,16 +412,25 @@ export default function App() {
     }
   };
 
-  // 키워드 통계 업데이트
-  const updateKeywordStats = () => {
-    const stats = newsService.getKeywordStats();
-    setKeywordStats(stats);
-  };
-
   // 즐겨찾기 토글
-  const handleToggleFavorite = (articleId: number) => {
-    newsService.toggleFavorite(articleId);
-    setArticles([...newsService.getFilteredArticles({})]);
+  const handleToggleFavorite = async (articleId: number) => {
+    try {
+      const article = articles.find(a => a.id === articleId);
+      if (!article) return;
+
+      if (article.is_favorite) {
+        await newsApi.removeFavorite(articleId);
+      } else {
+        await newsApi.addFavorite(articleId);
+      }
+
+      // 로컬 상태 업데이트
+      setArticles(prev => prev.map(a => 
+        a.id === articleId ? { ...a, is_favorite: !a.is_favorite } : a
+      ));
+    } catch (error) {
+      console.error('Failed to toggle favorite:', error);
+    }
   };
 
   // 탭 변경
@@ -357,18 +438,14 @@ export default function App() {
     setTabValue(newValue);
   };
 
-  // 검색 포커스
-  const focusSearch = () => {
-    searchInputRef.current?.focus();
-  };
 
   // 키보드 단축키 설정
   useKeyboardShortcuts({
     onRefresh: collectNews,
     onToggleTheme: toggleTheme,
     onSearch: () => searchInputRef.current?.focus(),
-    onNextTab: () => setTabValue(prev => (prev + 1) % 4),
-    onPrevTab: () => setTabValue(prev => (prev - 1 + 4) % 4),
+    onNextTab: () => setTabValue(prev => (prev + 1) % 5),
+    onPrevTab: () => setTabValue(prev => (prev - 1 + 5) % 5),
   });
 
   // 페이지네이션 계산
@@ -378,12 +455,23 @@ export default function App() {
     currentPage * itemsPerPage
   );
 
-  // 소스 목록
-  const sources = newsService.getSources();
-  const stats = newsService.getStats();
+  // 소스 목록 (articles에서 추출)
+  const sources = [...new Set(articles.map(a => a.source))].sort();
+  
+  // 통계 (클라이언트 계산)
+  const stats = {
+    totalArticles: articles.length,
+    totalSources: sources.length,
+    totalFavorites: articles.filter(a => a.is_favorite).length,
+    recentArticles: articles.filter(a => {
+      const weekAgo = new Date();
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      return new Date(a.published) >= weekAgo;
+    }).length
+  };
 
   return (
-    <ThemeContext.Provider value={{ isDarkMode, toggleTheme, theme }}>
+    <ThemeContext.Provider value={{ isDarkMode, toggleTheme, theme, colors }}>
       <ThemeProvider theme={theme}>
         <CssBaseline />
       
@@ -395,6 +483,12 @@ export default function App() {
           </Typography>
           
           <Stack direction="row" spacing={1} sx={{ display: { xs: 'none', sm: 'flex' } }}>
+            <Tooltip title={isDarkMode ? '라이트 모드' : '다크 모드'}>
+              <IconButton color="inherit" onClick={toggleTheme}>
+                {isDarkMode ? <LightMode /> : <DarkMode />}
+              </IconButton>
+            </Tooltip>
+            
             <Tooltip title="새로고침">
               <IconButton 
                 color="inherit" 
@@ -590,6 +684,7 @@ export default function App() {
             <Tab icon={<Analytics />} label={isDesktop ? "📊 키워드 분석" : "분석"} />
             <Tab icon={<Cloud />} label={isDesktop ? "☁️ 워드클라우드" : "워드클라우드"} />
             <Tab icon={<Favorite />} label={isDesktop ? "⭐ 즐겨찾기" : "즐겨찾기"} />
+            <Tab icon={<DarkMode />} label={isDesktop ? "🎨 테마/컬러" : "테마"} />
           </Tabs>
         </Box>
 
@@ -673,7 +768,7 @@ export default function App() {
               <Grid item xs={12}>
                 <Typography variant="h6" gutterBottom>🕸️ 키워드 관계 네트워크</Typography>
                 <Paper sx={{ p: 2, height: 500 }}>
-                  <KeywordNetwork data={newsService.getKeywordNetwork()} />
+                  <KeywordNetworkContainer />
                 </Paper>
               </Grid>
             </Grid>
@@ -716,6 +811,12 @@ export default function App() {
               </>
             );
           })()}
+        </TabPanel>
+
+        {/* 테마/컬러 팔레트 탭 */}
+        <TabPanel value={tabValue} index={4}>
+          <Typography variant="h5" gutterBottom>🎨 테마 & 컬러 팔레트</Typography>
+          <ColorPalette />
         </TabPanel>
       </Box>
       </ThemeProvider>

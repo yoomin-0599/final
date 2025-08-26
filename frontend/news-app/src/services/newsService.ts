@@ -28,29 +28,45 @@ export interface NetworkEdge {
   value: number;
 }
 
-// RSS 피드 소스 설정 (스트림릿 원본과 동일)
+// RSS 피드 소스 설정 (실제 수집 가능한 소스 중심)
 const FEEDS = [
-  // Korean sources
-  { feed_url: "https://it.donga.com/feeds/rss/", source: "IT동아", category: "IT", lang: "ko" },
-  { feed_url: "https://rss.etnews.com/Section902.xml", source: "전자신문_속보", category: "IT", lang: "ko" },
-  { feed_url: "https://zdnet.co.kr/news/news_xml.asp", source: "ZDNet Korea", category: "IT", lang: "ko" },
-  { feed_url: "https://www.itworld.co.kr/rss/all.xml", source: "ITWorld Korea", category: "IT", lang: "ko" },
+  // 한국 소스 (실제 작동하는 RSS 피드)
   { feed_url: "https://www.bloter.net/feed", source: "Bloter", category: "IT", lang: "ko" },
   { feed_url: "https://byline.network/feed/", source: "Byline Network", category: "IT", lang: "ko" },
   { feed_url: "https://platum.kr/feed", source: "Platum", category: "Startup", lang: "ko" },
-  { feed_url: "https://www.boannews.com/media/news_rss.xml", source: "보안뉴스", category: "Security", lang: "ko" },
+  { feed_url: "https://www.yna.co.kr/rss/technology.xml", source: "연합뉴스_기술", category: "Tech", lang: "ko" },
+  { feed_url: "https://feeds.feedburner.com/hankyung-it", source: "한경_IT", category: "IT", lang: "ko" },
+  { feed_url: "https://www.yonhapnews.co.kr/rss/tech.xml", source: "연합뉴스_과학IT", category: "Science", lang: "ko" },
   
-  // Global sources
+  // 글로벌 소스 (안정적인 RSS 피드)
   { feed_url: "https://techcrunch.com/feed/", source: "TechCrunch", category: "Tech", lang: "en" },
   { feed_url: "https://www.theverge.com/rss/index.xml", source: "The Verge", category: "Tech", lang: "en" },
   { feed_url: "https://venturebeat.com/category/ai/feed/", source: "VentureBeat AI", category: "AI", lang: "en" },
   { feed_url: "https://www.wired.com/feed/rss", source: "WIRED", category: "Tech", lang: "en" },
+  { feed_url: "https://feeds.feedburner.com/oreilly/radar", source: "O'Reilly Radar", category: "Tech", lang: "en" },
+  { feed_url: "https://www.engadget.com/rss.xml", source: "Engadget", category: "Tech", lang: "en" },
+  
+  // 추가 안정 소스
+  { feed_url: "https://rss.cnn.com/rss/edition_technology.rss", source: "CNN Tech", category: "Tech", lang: "en" },
+  { feed_url: "https://feeds.bbci.co.uk/news/technology/rss.xml", source: "BBC Technology", category: "Tech", lang: "en" },
+  { feed_url: "https://www.reuters.com/technology/feed/", source: "Reuters Tech", category: "Tech", lang: "en" },
 ];
 
-// 클라이언트 사이드에서 RSS를 직접 파싱할 수 없으므로, 
-// RSS를 JSON으로 변환해주는 공개 API를 사용합니다 (AllOrigins를 통한 CORS 우회)
-const RSS_TO_JSON_API = "https://api.allorigins.win/get";
-const BACKUP_RSS_API = "https://api.rss2json.com/v1/api.json";
+// 다양한 RSS 파싱 API를 사용하여 안정성 향상
+const RSS_APIS = [
+  {
+    name: "RSS2JSON",
+    url: "https://api.rss2json.com/v1/api.json",
+  },
+  {
+    name: "AllOrigins", 
+    url: "https://api.allorigins.win/get",
+  },
+  {
+    name: "ThingProxy",
+    url: "https://thingproxy.freeboard.io/fetch",
+  }
+];
 
 class NewsService {
   private articles: Article[] = [];
@@ -93,17 +109,18 @@ class NewsService {
     }
   }
 
-  // 간단한 RSS XML 파싱 (정규식 사용)
+  // 향상된 RSS XML 파싱 (다양한 RSS 형식 지원)
   private parseRSSFromXML(xmlContent: string, source: string): any[] {
     try {
       const items: any[] = [];
       
-      // RSS 아이템 추출 (간단한 정규식 사용)
-      const itemRegex = /<item[^>]*>([\s\S]*?)<\/item>/gi;
-      const titleRegex = /<title[^>]*><!\[CDATA\[([^\]]+)\]\]><\/title>|<title[^>]*>([^<]+)<\/title>/i;
-      const linkRegex = /<link[^>]*>([^<]+)<\/link>/i;
-      const pubDateRegex = /<pubDate[^>]*>([^<]+)<\/pubDate>/i;
-      const descRegex = /<description[^>]*><!\[CDATA\[([^\]]+)\]\]><\/description>|<description[^>]*>([^<]+)<\/description>/i;
+      // RSS 2.0 및 Atom 피드 모두 지원
+      const itemRegex = /<(?:item|entry)[^>]*>([\s\S]*?)<\/(?:item|entry)>/gi;
+      const titleRegex = /<title[^>]*>(?:<!\[CDATA\[([^\]]+)\]\]>|([^<]+))<\/title>/i;
+      const linkRegex = /<link[^>]*(?:href=["']([^"']+)["'])?[^>]*>([^<]*)<\/link>|<link[^>]*>([^<]+)<\/link>/i;
+      const pubDateRegex = /<(?:pubDate|published|updated)[^>]*>([^<]+)<\/(?:pubDate|published|updated)>/i;
+      const descRegex = /<(?:description|summary|content)[^>]*>(?:<!\[CDATA\[([^\]]+)\]\]>|([^<]+))<\/(?:description|summary|content)>/i;
+      const guidRegex = /<guid[^>]*>([^<]+)<\/guid>/i;
       
       let match;
       let count = 0;
@@ -114,20 +131,36 @@ class NewsService {
         const linkMatch = linkRegex.exec(itemContent);
         const pubDateMatch = pubDateRegex.exec(itemContent);
         const descMatch = descRegex.exec(itemContent);
+        const guidMatch = guidRegex.exec(itemContent);
         
-        if (titleMatch && linkMatch) {
+        if (titleMatch) {
           const title = (titleMatch[1] || titleMatch[2] || '').trim();
-          const link = linkMatch[1].trim();
+          let link = '';
+          
+          if (linkMatch) {
+            link = (linkMatch[1] || linkMatch[2] || linkMatch[3] || '').trim();
+          }
+          
+          // GUID를 링크로 사용 (링크가 없는 경우)
+          if (!link && guidMatch) {
+            const guid = guidMatch[1].trim();
+            if (guid.startsWith('http')) {
+              link = guid;
+            }
+          }
+          
           const pubDate = pubDateMatch ? pubDateMatch[1].trim() : new Date().toISOString();
           const description = descMatch ? (descMatch[1] || descMatch[2] || '').trim() : '';
           
-          items.push({
-            title: this.decodeHtmlEntities(title),
-            link: link,
-            pubDate: pubDate,
-            description: this.decodeHtmlEntities(description)
-          });
-          count++;
+          if (title && (link || count === 0)) { // 최소한 제목은 있어야 함
+            items.push({
+              title: this.decodeHtmlEntities(title),
+              link: link || `#${source}-${count}`,
+              pubDate: pubDate,
+              description: this.decodeHtmlEntities(description)
+            });
+            count++;
+          }
         }
       }
       
@@ -202,37 +235,95 @@ class NewsService {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000); // 10초 타임아웃
         
-        // RSS2JSON API 사용 (API 키 없이 사용 가능)
-        const response = await fetch(
-          `${BACKUP_RSS_API}?rss_url=${encodeURIComponent(feed.feed_url)}&count=15`,
-          { 
-            signal: controller.signal,
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json'
+        // 여러 API를 순차적으로 시도 (강화된 오류 처리)
+        let articles: any[] = [];
+        let lastError = null;
+        
+        for (let apiIndex = 0; apiIndex < RSS_APIS.length; apiIndex++) {
+          const api = RSS_APIS[apiIndex];
+          try {
+            console.log(`🔄 ${feed.source}: ${api.name} API 시도 중...`);
+            
+            let response;
+            let data;
+            
+            if (api.name === 'RSS2JSON') {
+              response = await fetch(
+                `${api.url}?rss_url=${encodeURIComponent(feed.feed_url)}&count=15&api_key=`,
+                { 
+                  signal: controller.signal,
+                  headers: {
+                    'Accept': 'application/json',
+                    'User-Agent': 'Mozilla/5.0 (compatible; NewsAggregator/1.0)'
+                  }
+                }
+              );
+              
+              if (response.ok) {
+                data = await response.json();
+                if (data.status === 'ok' && data.items && data.items.length > 0) {
+                  articles = data.items.slice(0, 15);
+                  break; // 성공시 루프 탈출
+                }
+              }
+            } else if (api.name === 'AllOrigins') {
+              response = await fetch(
+                `${api.url}?url=${encodeURIComponent(feed.feed_url)}`,
+                { 
+                  signal: controller.signal,
+                  headers: {
+                    'Accept': 'application/json'
+                  }
+                }
+              );
+              
+              if (response.ok) {
+                data = await response.json();
+                if (data.contents) {
+                  articles = this.parseRSSFromXML(data.contents, feed.source);
+                  if (articles.length > 0) break;
+                }
+              }
+            } else if (api.name === 'ThingProxy') {
+              response = await fetch(
+                `${api.url}/${encodeURIComponent(feed.feed_url)}`,
+                { 
+                  signal: controller.signal,
+                  headers: {
+                    'Accept': 'text/xml,application/xml,application/rss+xml'
+                  }
+                }
+              );
+              
+              if (response.ok) {
+                const xmlText = await response.text();
+                articles = this.parseRSSFromXML(xmlText, feed.source);
+                if (articles.length > 0) break;
+              }
             }
+            
+          } catch (apiError) {
+            lastError = apiError;
+            console.warn(`${api.name} API 실패 (${feed.source}):`, apiError instanceof Error ? apiError.message : apiError);
+            continue; // 다음 API 시도
           }
-        );
+        }
         
         clearTimeout(timeoutId);
         
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
+        // 마지막으로 수집된 기사 수 확인
         
-        const data = await response.json();
-        
-        if (data.status === 'ok' && data.items && data.items.length > 0) {
-          const articles = data.items.slice(0, 15).map((item: any) => ({
+        if (articles && articles.length > 0) {
+          const processedArticles = articles.map((item: any) => ({
             id: this.nextId++,
             title: this.cleanTitle(item.title || ''),
-            link: item.link || '',
-            published: this.parseDate(item.pubDate) || new Date().toISOString(),
+            link: item.link || item.url || '',
+            published: this.parseDate(item.pubDate || item.published) || new Date().toISOString(),
             source: feed.source,
             summary: this.cleanSummary(item.description || item.content || ''),
             keywords: this.extractKeywords(
               (item.title || '') + ' ' + 
-              (item.description || '') + ' ' + 
+              (item.description || item.content || '') + ' ' + 
               (item.categories?.join(' ') || '')
             ),
             is_favorite: false,
@@ -240,15 +331,27 @@ class NewsService {
             language: feed.lang
           }));
           
+          console.log(`✅ ${feed.source}: ${processedArticles.length}개 기사 수집 성공`);
           successfulFeeds.push(feed.source);
-          return articles;
+          return processedArticles;
         } else {
-          console.warn(`${feed.source}: 데이터 없음 또는 잘못된 구조`, data);
+          console.warn(`${feed.source}: 모든 API에서 데이터 수집 실패`);
           throw new Error(`No valid data from ${feed.source}`);
         }
       } catch (error) {
         failedFeeds.push(feed.source);
-        console.warn(`❌ ${feed.source} 수집 실패:`, error instanceof Error ? error.message : error);
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.warn(`❌ ${feed.source} 전체 실패:`, errorMsg);
+        
+        // 에러 유형 분류
+        if (errorMsg.includes('CORS') || errorMsg.includes('blocked')) {
+          console.warn(`🔄 ${feed.source}: CORS 정책으로 인한 차단`);
+        } else if (errorMsg.includes('timeout') || errorMsg.includes('aborted')) {
+          console.warn(`⏱️ ${feed.source}: 요청 시간 초과`);
+        } else if (errorMsg.includes('Failed to fetch') || errorMsg.includes('NetworkError')) {
+          console.warn(`🌐 ${feed.source}: 네트워크 연결 오류`);
+        }
+        
         return [];
       }
     });
