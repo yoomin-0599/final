@@ -4,10 +4,7 @@ import {
   Typography,
   AppBar,
   Toolbar,
-  Tabs,
-  Tab,
   Box,
-  Grid,
   TextField,
   Select,
   MenuItem,
@@ -17,12 +14,19 @@ import {
   CircularProgress,
   Paper,
   Chip,
+  Card,
+  CardContent,
+  Stack,
+  Divider,
+  Button,
 } from '@mui/material';
 import {
   Article as ArticleIcon,
   Favorite,
   Analytics,
   Cloud,
+  Search,
+  FilterList,
 } from '@mui/icons-material';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
@@ -42,33 +46,181 @@ const theme = createTheme({
     secondary: {
       main: '#dc004e',
     },
+    background: {
+      default: '#f5f5f5',
+      paper: '#ffffff',
+    },
+  },
+  typography: {
+    h4: {
+      fontWeight: 600,
+      marginBottom: '16px',
+    },
+    h5: {
+      fontWeight: 500,
+      marginBottom: '12px',
+    },
+    h6: {
+      fontWeight: 500,
+      marginBottom: '8px',
+    },
+  },
+  components: {
+    MuiPaper: {
+      styleOverrides: {
+        root: {
+          borderRadius: '8px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+        },
+      },
+    },
+    MuiCard: {
+      styleOverrides: {
+        root: {
+          borderRadius: '8px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+          transition: 'box-shadow 0.3s ease',
+          '&:hover': {
+            boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+          },
+        },
+      },
+    },
   },
 });
 
-interface TabPanelProps {
-  children?: React.ReactNode;
-  index: number;
-  value: number;
+// Streamlit-like sidebar component
+interface SidebarProps {
+  currentView: string;
+  onViewChange: (view: string) => void;
+  searchTerm: string;
+  setSearchTerm: (term: string) => void;
+  selectedSource: string;
+  setSelectedSource: (source: string) => void;
+  sources: string[];
+  stats: Stats | null;
 }
 
-function TabPanel(props: TabPanelProps) {
-  const { children, value, index, ...other } = props;
+function Sidebar({ 
+  currentView, 
+  onViewChange, 
+  searchTerm, 
+  setSearchTerm, 
+  selectedSource, 
+  setSelectedSource, 
+  sources, 
+  stats 
+}: SidebarProps) {
+  const menuItems = [
+    { id: 'articles', label: '기사 목록', icon: <ArticleIcon /> },
+    { id: 'favorites', label: '즐겨찾기', icon: <Favorite /> },
+    { id: 'keywords', label: '키워드 분석', icon: <Cloud /> },
+    { id: 'stats', label: '통계', icon: <Analytics /> },
+  ];
 
   return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`tabpanel-${index}`}
-      aria-labelledby={`tab-${index}`}
-      {...other}
+    <Paper 
+      sx={{ 
+        width: 320, 
+        height: '100vh', 
+        position: 'fixed', 
+        left: 0, 
+        top: 0, 
+        borderRadius: 0,
+        borderRight: '1px solid #e0e0e0',
+        overflow: 'auto',
+      }}
     >
-      {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
-    </div>
+      <Box sx={{ p: 3 }}>
+        <Typography variant="h5" sx={{ mb: 3, fontWeight: 700, color: 'primary.main' }}>
+          뉴스있슈~
+        </Typography>
+        
+        {stats && (
+          <Box sx={{ mb: 3 }}>
+            <Stack direction="row" spacing={1} flexWrap="wrap" gap={1}>
+              <Chip 
+                icon={<ArticleIcon fontSize="small" />} 
+                label={`${stats.total_articles}개 기사`} 
+                size="small"
+                variant="outlined"
+              />
+              <Chip 
+                icon={<Favorite fontSize="small" />} 
+                label={`${stats.total_favorites}개 즐겨찾기`} 
+                size="small"
+                variant="outlined"
+              />
+            </Stack>
+          </Box>
+        )}
+
+        <Divider sx={{ mb: 3 }} />
+
+        {/* Navigation Menu */}
+        <Stack spacing={1} sx={{ mb: 3 }}>
+          {menuItems.map((item) => (
+            <Button
+              key={item.id}
+              variant={currentView === item.id ? 'contained' : 'text'}
+              startIcon={item.icon}
+              onClick={() => onViewChange(item.id)}
+              sx={{ 
+                justifyContent: 'flex-start', 
+                py: 1.5,
+                borderRadius: 2,
+                textTransform: 'none',
+                fontSize: '14px',
+              }}
+              fullWidth
+            >
+              {item.label}
+            </Button>
+          ))}
+        </Stack>
+
+        <Divider sx={{ mb: 3 }} />
+
+        {/* Search and Filter Controls */}
+        <Typography variant="h6" sx={{ mb: 2 }}>
+          <Search fontSize="small" sx={{ mr: 1, verticalAlign: 'middle' }} />
+          검색 및 필터
+        </Typography>
+        
+        <Stack spacing={2}>
+          <TextField
+            size="small"
+            label="검색어"
+            variant="outlined"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="제목, 요약, 키워드로 검색"
+            fullWidth
+          />
+
+          <FormControl size="small" variant="outlined" fullWidth>
+            <InputLabel>뉴스 소스</InputLabel>
+            <Select
+              value={selectedSource}
+              onChange={(e) => setSelectedSource(e.target.value)}
+              label="뉴스 소스"
+            >
+              <MenuItem value="">전체</MenuItem>
+              {sources.map((source) => (
+                <MenuItem key={source} value={source}>
+                  {source}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Stack>
+      </Box>
+    </Paper>
   );
 }
 
 function App() {
-  const [tabValue, setTabValue] = useState(0);
+  const [currentView, setCurrentView] = useState('articles');
   const [articles, setArticles] = useState<Article[]>([]);
   const [favorites, setFavorites] = useState<Article[]>([]);
   const [sources, setSources] = useState<string[]>([]);
@@ -110,16 +262,12 @@ function App() {
   };
 
   const loadFavorites = async () => {
-    setLoading(true);
-    setError(null);
     try {
       const data = await newsApi.getFavorites();
       setFavorites(data);
     } catch (err) {
       setError('즐겨찾기를 불러오는데 실패했습니다.');
       console.error(err);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -168,7 +316,7 @@ function App() {
       }
       // Reload data
       loadArticles();
-      if (tabValue === 1) {
+      if (currentView === 'favorites') {
         loadFavorites();
       }
     } catch (err) {
@@ -177,9 +325,9 @@ function App() {
     }
   };
 
-  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
-    setTabValue(newValue);
-    if (newValue === 1) {
+  const handleViewChange = (view: string) => {
+    setCurrentView(view);
+    if (view === 'favorites') {
       loadFavorites();
     }
   };
@@ -190,179 +338,192 @@ function App() {
     }
   }, [searchTerm, selectedSource]);
 
+  const renderMainContent = () => {
+    if (loading) {
+      return (
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
+          <CircularProgress size={48} />
+        </Box>
+      );
+    }
+
+    switch (currentView) {
+      case 'articles':
+        return (
+          <Box>
+            <Typography variant="h4" sx={{ mb: 3 }}>
+              📰 기사 목록
+            </Typography>
+            
+            {articles.length === 0 ? (
+              <Paper sx={{ p: 4, textAlign: 'center' }}>
+                <Typography variant="h6" color="text.secondary">
+                  검색 조건에 맞는 기사가 없습니다.
+                </Typography>
+              </Paper>
+            ) : (
+              <Stack spacing={2}>
+                {articles.map((article) => (
+                  <ArticleCard
+                    key={article.id}
+                    article={article}
+                    onToggleFavorite={handleToggleFavorite}
+                  />
+                ))}
+              </Stack>
+            )}
+          </Box>
+        );
+
+      case 'favorites':
+        return (
+          <Box>
+            <Typography variant="h4" sx={{ mb: 3 }}>
+              ⭐ 즐겨찾기
+            </Typography>
+            
+            {favorites.length === 0 ? (
+              <Paper sx={{ p: 4, textAlign: 'center' }}>
+                <Typography variant="h6" color="text.secondary">
+                  즐겨찾기한 기사가 없습니다.
+                </Typography>
+              </Paper>
+            ) : (
+              <Stack spacing={2}>
+                {favorites.map((article) => (
+                  <ArticleCard
+                    key={article.id}
+                    article={article}
+                    onToggleFavorite={handleToggleFavorite}
+                  />
+                ))}
+              </Stack>
+            )}
+          </Box>
+        );
+
+      case 'keywords':
+        return (
+          <Box>
+            <Typography variant="h4" sx={{ mb: 3 }}>
+              🏷️ 키워드 분석
+            </Typography>
+            
+            <Stack spacing={4}>
+              <Card>
+                <CardContent>
+                  <KeywordCloud keywords={keywords} />
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardContent>
+                  <KeywordNetwork data={networkData} />
+                </CardContent>
+              </Card>
+            </Stack>
+          </Box>
+        );
+
+      case 'stats':
+        return (
+          <Box>
+            <Typography variant="h4" sx={{ mb: 3 }}>
+              📊 통계
+            </Typography>
+            
+            {stats && (
+              <Stack spacing={4}>
+                <Card>
+                  <CardContent>
+                    <StatsChart stats={stats} />
+                  </CardContent>
+                </Card>
+                
+                <Card>
+                  <CardContent>
+                    <Typography variant="h6" gutterBottom>
+                      📋 요약 통계
+                    </Typography>
+                    <Stack direction="row" spacing={4} sx={{ mt: 2 }}>
+                      <Box textAlign="center">
+                        <Typography variant="h3" color="primary.main" fontWeight="bold">
+                          {stats.total_articles}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          총 기사 수
+                        </Typography>
+                      </Box>
+                      <Box textAlign="center">
+                        <Typography variant="h3" color="primary.main" fontWeight="bold">
+                          {stats.total_sources}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          소스 수
+                        </Typography>
+                      </Box>
+                      <Box textAlign="center">
+                        <Typography variant="h3" color="secondary.main" fontWeight="bold">
+                          {stats.total_favorites}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          즐겨찾기 수
+                        </Typography>
+                      </Box>
+                    </Stack>
+                  </CardContent>
+                </Card>
+              </Stack>
+            )}
+          </Box>
+        );
+
+      default:
+        return null;
+    }
+  };
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <AppBar position="static">
-        <Toolbar>
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-            뉴스있슈~ (News IT's Issue)
-          </Typography>
-          {stats && (
-            <Box sx={{ display: 'flex', gap: 2 }}>
-              <Chip
-                icon={<ArticleIcon />}
-                label={`총 ${stats.total_articles}개 기사`}
-                color="primary"
-                variant="outlined"
-                sx={{ color: 'white', borderColor: 'white' }}
-              />
-              <Chip
-                icon={<Favorite />}
-                label={`즐겨찾기 ${stats.total_favorites}개`}
-                color="primary"
-                variant="outlined"
-                sx={{ color: 'white', borderColor: 'white' }}
-              />
-            </Box>
+      
+      {/* Streamlit-style Layout */}
+      <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+        {/* Sidebar */}
+        <Sidebar
+          currentView={currentView}
+          onViewChange={handleViewChange}
+          searchTerm={searchTerm}
+          setSearchTerm={setSearchTerm}
+          selectedSource={selectedSource}
+          setSelectedSource={setSelectedSource}
+          sources={sources}
+          stats={stats}
+        />
+
+        {/* Main Content Area */}
+        <Box 
+          sx={{ 
+            flex: 1, 
+            ml: '320px', // Sidebar width
+            p: 4,
+            minHeight: '100vh',
+            backgroundColor: 'background.default'
+          }}
+        >
+          {error && (
+            <Alert 
+              severity="error" 
+              sx={{ mb: 3 }} 
+              onClose={() => setError(null)}
+            >
+              {error}
+            </Alert>
           )}
-        </Toolbar>
-      </AppBar>
 
-      <Container maxWidth="xl" sx={{ mt: 3 }}>
-        <Paper elevation={1}>
-          <Tabs value={tabValue} onChange={handleTabChange} centered>
-            <Tab icon={<ArticleIcon />} label="기사 목록" />
-            <Tab icon={<Favorite />} label="즐겨찾기" />
-            <Tab icon={<Cloud />} label="키워드 분석" />
-            <Tab icon={<Analytics />} label="통계" />
-          </Tabs>
-        </Paper>
-
-        {error && (
-          <Alert severity="error" sx={{ mt: 2 }} onClose={() => setError(null)}>
-            {error}
-          </Alert>
-        )}
-
-        <TabPanel value={tabValue} index={0}>
-          <Box sx={{ mb: 3 }}>
-            <Grid container spacing={2}>
-              <Grid item xs={12} md={6}>
-                <TextField
-                  fullWidth
-                  label="검색"
-                  variant="outlined"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="제목, 요약, 키워드로 검색"
-                />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <FormControl fullWidth variant="outlined">
-                  <InputLabel>소스 필터</InputLabel>
-                  <Select
-                    value={selectedSource}
-                    onChange={(e) => setSelectedSource(e.target.value)}
-                    label="소스 필터"
-                  >
-                    <MenuItem value="">전체</MenuItem>
-                    {sources.map((source) => (
-                      <MenuItem key={source} value={source}>
-                        {source}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-            </Grid>
-          </Box>
-
-          {loading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', p: 5 }}>
-              <CircularProgress />
-            </Box>
-          ) : (
-            <Grid container spacing={3}>
-              {articles.map((article) => (
-                <Grid item xs={12} md={6} lg={4} key={article.id}>
-                  <ArticleCard
-                    article={article}
-                    onToggleFavorite={handleToggleFavorite}
-                  />
-                </Grid>
-              ))}
-            </Grid>
-          )}
-        </TabPanel>
-
-        <TabPanel value={tabValue} index={1}>
-          {loading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', p: 5 }}>
-              <CircularProgress />
-            </Box>
-          ) : favorites.length === 0 ? (
-            <Typography variant="body1" sx={{ textAlign: 'center', p: 5 }}>
-              즐겨찾기한 기사가 없습니다.
-            </Typography>
-          ) : (
-            <Grid container spacing={3}>
-              {favorites.map((article) => (
-                <Grid item xs={12} md={6} lg={4} key={article.id}>
-                  <ArticleCard
-                    article={article}
-                    onToggleFavorite={handleToggleFavorite}
-                  />
-                </Grid>
-              ))}
-            </Grid>
-          )}
-        </TabPanel>
-
-        <TabPanel value={tabValue} index={2}>
-          <Grid container spacing={3}>
-            <Grid item xs={12} lg={6}>
-              <KeywordCloud keywords={keywords} />
-            </Grid>
-            <Grid item xs={12} lg={6}>
-              <KeywordNetwork data={networkData} />
-            </Grid>
-          </Grid>
-        </TabPanel>
-
-        <TabPanel value={tabValue} index={3}>
-          {stats && (
-            <Grid container spacing={3}>
-              <Grid item xs={12}>
-                <StatsChart stats={stats} />
-              </Grid>
-              <Grid item xs={12}>
-                <Paper sx={{ p: 3 }}>
-                  <Typography variant="h6" gutterBottom>
-                    통계 요약
-                  </Typography>
-                  <Grid container spacing={2}>
-                    <Grid item xs={12} md={4}>
-                      <Typography variant="body2" color="text.secondary">
-                        총 기사 수
-                      </Typography>
-                      <Typography variant="h4">
-                        {stats.total_articles}
-                      </Typography>
-                    </Grid>
-                    <Grid item xs={12} md={4}>
-                      <Typography variant="body2" color="text.secondary">
-                        소스 수
-                      </Typography>
-                      <Typography variant="h4">
-                        {stats.total_sources}
-                      </Typography>
-                    </Grid>
-                    <Grid item xs={12} md={4}>
-                      <Typography variant="body2" color="text.secondary">
-                        즐겨찾기 수
-                      </Typography>
-                      <Typography variant="h4">
-                        {stats.total_favorites}
-                      </Typography>
-                    </Grid>
-                  </Grid>
-                </Paper>
-              </Grid>
-            </Grid>
-          )}
-        </TabPanel>
-      </Container>
+          {renderMainContent()}
+        </Box>
+      </Box>
     </ThemeProvider>
   );
 }
