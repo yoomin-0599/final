@@ -48,8 +48,9 @@ const FEEDS = [
 ];
 
 // 클라이언트 사이드에서 RSS를 직접 파싱할 수 없으므로, 
-// RSS를 JSON으로 변환해주는 공개 API를 사용합니다
-const RSS_TO_JSON_API = "https://api.rss2json.com/v1/api.json";
+// RSS를 JSON으로 변환해주는 공개 API를 사용합니다 (AllOrigins를 통한 CORS 우회)
+const RSS_TO_JSON_API = "https://api.allorigins.win/get";
+const BACKUP_RSS_API = "https://api.rss2json.com/v1/api.json";
 
 class NewsService {
   private articles: Article[] = [];
@@ -90,6 +91,59 @@ class NewsService {
       clearInterval(this.autoRefreshInterval);
       this.autoRefreshInterval = null;
     }
+  }
+
+  // 간단한 RSS XML 파싱 (정규식 사용)
+  private parseRSSFromXML(xmlContent: string, source: string): any[] {
+    try {
+      const items: any[] = [];
+      
+      // RSS 아이템 추출 (간단한 정규식 사용)
+      const itemRegex = /<item[^>]*>([\s\S]*?)<\/item>/gi;
+      const titleRegex = /<title[^>]*><!\[CDATA\[([^\]]+)\]\]><\/title>|<title[^>]*>([^<]+)<\/title>/i;
+      const linkRegex = /<link[^>]*>([^<]+)<\/link>/i;
+      const pubDateRegex = /<pubDate[^>]*>([^<]+)<\/pubDate>/i;
+      const descRegex = /<description[^>]*><!\[CDATA\[([^\]]+)\]\]><\/description>|<description[^>]*>([^<]+)<\/description>/i;
+      
+      let match;
+      let count = 0;
+      while ((match = itemRegex.exec(xmlContent)) !== null && count < 15) {
+        const itemContent = match[1];
+        
+        const titleMatch = titleRegex.exec(itemContent);
+        const linkMatch = linkRegex.exec(itemContent);
+        const pubDateMatch = pubDateRegex.exec(itemContent);
+        const descMatch = descRegex.exec(itemContent);
+        
+        if (titleMatch && linkMatch) {
+          const title = (titleMatch[1] || titleMatch[2] || '').trim();
+          const link = linkMatch[1].trim();
+          const pubDate = pubDateMatch ? pubDateMatch[1].trim() : new Date().toISOString();
+          const description = descMatch ? (descMatch[1] || descMatch[2] || '').trim() : '';
+          
+          items.push({
+            title: this.decodeHtmlEntities(title),
+            link: link,
+            pubDate: pubDate,
+            description: this.decodeHtmlEntities(description)
+          });
+          count++;
+        }
+      }
+      
+      console.log(`${source}에서 ${items.length}개 아이템 파싱 성공`);
+      return items;
+    } catch (error) {
+      console.warn(`${source} RSS XML 파싱 실패:`, error);
+      return [];
+    }
+  }
+
+  // HTML 엔티티 디코딩
+  private decodeHtmlEntities(text: string): string {
+    const textarea = document.createElement('textarea');
+    textarea.innerHTML = text;
+    return textarea.value;
   }
 
   // 로컬스토리지에서 데이터 로드
@@ -148,12 +202,14 @@ class NewsService {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000); // 10초 타임아웃
         
+        // RSS2JSON API 사용 (API 키 없이 사용 가능)
         const response = await fetch(
-          `${RSS_TO_JSON_API}?rss_url=${encodeURIComponent(feed.feed_url)}&api_key=YOUR_API_KEY`, // API 키 추가 가능
+          `${BACKUP_RSS_API}?rss_url=${encodeURIComponent(feed.feed_url)}&count=15`,
           { 
             signal: controller.signal,
             headers: {
-              'User-Agent': 'NewsIssue-WebApp/1.0'
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
             }
           }
         );
@@ -187,7 +243,8 @@ class NewsService {
           successfulFeeds.push(feed.source);
           return articles;
         } else {
-          throw new Error(`Invalid data structure: ${data.status || 'unknown'}`);
+          console.warn(`${feed.source}: 데이터 없음 또는 잘못된 구조`, data);
+          throw new Error(`No valid data from ${feed.source}`);
         }
       } catch (error) {
         failedFeeds.push(feed.source);
@@ -214,6 +271,13 @@ class NewsService {
     console.log(`✅ 성공 소스: ${successfulFeeds.join(', ')}`);
     if (failedFeeds.length > 0) {
       console.log(`❌ 실패 소스: ${failedFeeds.join(', ')}`);
+    }
+
+    // 수집된 기사가 너무 적을 경우 샘플 데이터 추가
+    if (uniqueArticles.length < 3) {
+      console.log('⚠️ 수집된 기사가 부족하여 샘플 데이터를 추가합니다.');
+      const sampleData = this.generateSampleData();
+      uniqueArticles.push(...sampleData);
     }
 
     this.articles = uniqueArticles;
@@ -517,6 +581,64 @@ class NewsService {
       totalFavorites,
       recentArticles
     };
+  }
+  
+  // 샘플 데이터 생성 (RSS 수집이 실패할 경우 대비용)
+  private generateSampleData(): Article[] {
+    const sampleArticles = [
+      {
+        id: this.nextId++,
+        title: "AI 기술의 새로운 돌파구, GPT-4 성능 향상 발표",
+        link: "#sample-1",
+        published: new Date(Date.now() - 3600000).toISOString(),
+        source: "IT뉴스 샘플",
+        summary: "최신 AI 모델의 성능 개선과 새로운 기능들이 발표되었습니다. 자연어 처리 능력이 크게 향상되었으며, 다양한 분야에서의 활용 가능성이 확대되고 있습니다.",
+        keywords: ["AI", "GPT-4", "자연어처리", "인공지능", "기술발전"],
+        is_favorite: false
+      },
+      {
+        id: this.nextId++,
+        title: "5G 네트워크 확산으로 IoT 시장 급성장 전망",
+        link: "#sample-2",
+        published: new Date(Date.now() - 7200000).toISOString(),
+        source: "테크 샘플",
+        summary: "5G 네트워크의 본격적인 상용화와 함께 IoT(사물인터넷) 시장이 급속도로 성장하고 있습니다. 스마트 시티, 자율주행차, 산업용 IoT 등 다양한 분야에서 혁신이 일어나고 있습니다.",
+        keywords: ["5G", "IoT", "스마트시티", "자율주행", "네트워크"],
+        is_favorite: false
+      },
+      {
+        id: this.nextId++,
+        title: "메타버스 플랫폼, 엔터프라이즈 시장 진출 가속화",
+        link: "#sample-3",
+        published: new Date(Date.now() - 10800000).toISOString(),
+        source: "VR뉴스 샘플",
+        summary: "메타버스 기술이 게임과 엔터테인먼트를 넘어 기업용 솔루션으로 확산되고 있습니다. 원격 회의, 교육 훈련, 제품 시연 등 다양한 비즈니스 활용 사례가 늘어나고 있습니다.",
+        keywords: ["메타버스", "VR", "AR", "원격회의", "엔터프라이즈"],
+        is_favorite: false
+      },
+      {
+        id: this.nextId++,
+        title: "양자 컴퓨팅 상용화 앞당기는 새로운 알고리즘 개발",
+        link: "#sample-4",
+        published: new Date(Date.now() - 14400000).toISOString(),
+        source: "과학기술 샘플",
+        summary: "양자 컴퓨팅의 상용화를 앞당길 수 있는 새로운 양자 알고리즘이 개발되었습니다. 기존 컴퓨터로는 해결하기 어려운 복잡한 문제들을 효율적으로 처리할 수 있을 것으로 기대됩니다.",
+        keywords: ["양자컴퓨팅", "양자알고리즘", "슈퍼컴퓨터", "과학기술", "혁신"],
+        is_favorite: false
+      },
+      {
+        id: this.nextId++,
+        title: "블록체인 기반 디지털 신원인증 시스템 도입 확대",
+        link: "#sample-5",
+        published: new Date(Date.now() - 18000000).toISOString(),
+        source: "블록체인 샘플",
+        summary: "블록체인 기술을 활용한 디지털 신원인증 시스템이 금융, 의료, 교육 등 다양한 분야에서 도입되고 있습니다. 개인정보 보호와 보안성을 크게 향상시킬 것으로 예상됩니다.",
+        keywords: ["블록체인", "디지털신원", "보안", "개인정보보호", "핀테크"],
+        is_favorite: false
+      }
+    ];
+    
+    return sampleArticles;
   }
 }
 

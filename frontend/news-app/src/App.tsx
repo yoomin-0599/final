@@ -265,7 +265,7 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   
-  // 사이드바 - 데스크톱에서는 기본으로 열림
+  // 사이드바 - 데스크톱에서는 항상 고정
   const [drawerOpen, setDrawerOpen] = useState(true);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 1024);
@@ -548,7 +548,7 @@ export default function App() {
             border: theme => theme.palette.mode === 'dark' ? '1px solid rgba(255, 255, 255, 0.12)' : 'none'
           }}>
             <Typography variant="body2" sx={{ 
-              color: theme => theme.palette.mode === 'dark' ? 'grey.100' : 'text.primary'
+              color: theme => theme.palette.mode === 'dark' ? 'grey.300' : 'text.primary'
             }}>
               📊 총 {stats.totalArticles}건의 뉴스<br/>
               📰 {stats.totalSources}개 소스<br/>
