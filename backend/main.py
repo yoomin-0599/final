@@ -1,5 +1,7 @@
 from fastapi import FastAPI, HTTPException, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import List, Dict, Optional, Set
 import sqlite3
@@ -12,9 +14,7 @@ import pandas as pd
 from dotenv import load_dotenv
 import asyncio
 
-sys.path.append(str(Path(__file__).parent.parent))
-from translate_util import translate_rows_if_needed
-from keyword_maker import extract_keywords
+from news_collector import collect_all_news, init_db
 
 load_dotenv()
 
@@ -31,7 +31,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-DB_PATH = os.getenv("DB_PATH", "news.db")
+# DB 경로 통일 - backend 폴더 내에 위치
+DB_PATH = os.getenv("DB_PATH", "backend/news.db")
+
+# DB 초기화
+init_db()
 
 class Article(BaseModel):
     id: int
@@ -288,18 +292,28 @@ async def collect_news(background_tasks: BackgroundTasks, request: NewsCollectio
 async def run_news_collection(days: int, max_pages: int):
     """백그라운드에서 뉴스 수집을 실행합니다."""
     try:
-        # archive_last_year.py 실행
-        import subprocess
-        cmd = [
-            "python", 
-            str(Path(__file__).parent.parent / "archive_last_year.py"),
-            "--days", str(days),
-            "--max-pages", str(max_pages)
-        ]
-        subprocess.run(cmd, check=True)
-        print(f"뉴스 수집 완료: {days}일, {max_pages}페이지")
+        # news_collector 모듈 사용
+        collect_all_news()
+        print(f"뉴스 수집 완료")
     except Exception as e:
         print(f"뉴스 수집 실패: {e}")
+
+# 정적 파일 서빙 설정 (React 빌드 파일)
+frontend_dist = Path(__file__).parent.parent / "frontend" / "news-app" / "dist"
+if frontend_dist.exists():
+    app.mount("/assets", StaticFiles(directory=str(frontend_dist / "assets")), name="assets")
+    
+    @app.get("/")
+    async def serve_frontend():
+        index_path = frontend_dist / "index.html"
+        if index_path.exists():
+            return FileResponse(str(index_path))
+        else:
+            return {"message": "Frontend not built. Please run 'npm run build' in frontend/news-app directory"}
+else:
+    @app.get("/")
+    async def root():
+        return {"message": "News API Server is running. Frontend not found."}
 
 # 컬렉션 관리 API
 @app.get("/api/collections")
