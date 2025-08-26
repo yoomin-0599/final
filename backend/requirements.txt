@@ -1,3 +1,7 @@
+# Build tools (required for some packages)
+setuptools==69.5.1
+wheel==0.42.0
+
 # Core dependencies
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
