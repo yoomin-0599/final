@@ -32,7 +32,8 @@ jobs:
     - name: Install dependencies
       run: |
         cd frontend/news-app
-        npm ci --legacy-peer-deps
+        npm config set registry https://registry.npmjs.org/
+        npm install --legacy-peer-deps --prefer-offline --no-audit --no-fund
 
     - name: Build project
       run: |
