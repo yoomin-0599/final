@@ -1,531 +1,210 @@
-import React, { useState, useEffect } from 'react';
-import {
-  Container,
-  Typography,
-  AppBar,
-  Toolbar,
-  Box,
-  TextField,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
-  Alert,
-  CircularProgress,
-  Paper,
-  Chip,
-  Card,
-  CardContent,
-  Stack,
-  Divider,
-  Button,
-} from '@mui/material';
-import {
-  Article as ArticleIcon,
-  Favorite,
-  Analytics,
-  Cloud,
-  Search,
-  FilterList,
-} from '@mui/icons-material';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
-import CssBaseline from '@mui/material/CssBaseline';
+import React, { useState, useEffect, useRef } from 'react';
+import './App.css';
 
-import { newsApi } from './api/newsApi';
-import type { Article, KeywordStats, NetworkData, Stats } from './api/newsApi';
-import { ArticleCard } from './components/ArticleCard';
-import { KeywordCloud } from './components/KeywordCloud';
-import { KeywordNetwork } from './components/KeywordNetwork';
-import { StatsChart } from './components/StatsChart';
-
-const theme = createTheme({
-  palette: {
-    primary: {
-      main: '#1976d2',
-    },
-    secondary: {
-      main: '#dc004e',
-    },
-    background: {
-      default: '#f5f5f5',
-      paper: '#ffffff',
-    },
-  },
-  typography: {
-    h4: {
-      fontWeight: 600,
-      marginBottom: '16px',
-    },
-    h5: {
-      fontWeight: 500,
-      marginBottom: '12px',
-    },
-    h6: {
-      fontWeight: 500,
-      marginBottom: '8px',
-    },
-  },
-  components: {
-    MuiPaper: {
-      styleOverrides: {
-        root: {
-          borderRadius: '8px',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-        },
-      },
-    },
-    MuiCard: {
-      styleOverrides: {
-        root: {
-          borderRadius: '8px',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-          transition: 'box-shadow 0.3s ease',
-          '&:hover': {
-            boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
-          },
-        },
-      },
-    },
-  },
-});
-
-// Streamlit-like sidebar component
-interface SidebarProps {
-  currentView: string;
-  onViewChange: (view: string) => void;
-  searchTerm: string;
-  setSearchTerm: (term: string) => void;
-  selectedSource: string;
-  setSelectedSource: (source: string) => void;
-  sources: string[];
-  stats: Stats | null;
-}
-
-function Sidebar({ 
-  currentView, 
-  onViewChange, 
-  searchTerm, 
-  setSearchTerm, 
-  selectedSource, 
-  setSelectedSource, 
-  sources, 
-  stats 
-}: SidebarProps) {
-  const menuItems = [
-    { id: 'articles', label: '기사 목록', icon: <ArticleIcon /> },
-    { id: 'favorites', label: '즐겨찾기', icon: <Favorite /> },
-    { id: 'keywords', label: '키워드 분석', icon: <Cloud /> },
-    { id: 'stats', label: '통계', icon: <Analytics /> },
-  ];
-
-  return (
-    <Paper 
-      sx={{ 
-        width: 320, 
-        height: '100vh', 
-        position: 'fixed', 
-        left: 0, 
-        top: 0, 
-        borderRadius: 0,
-        borderRight: '1px solid #e0e0e0',
-        overflow: 'auto',
-      }}
-    >
-      <Box sx={{ p: 3 }}>
-        <Typography variant="h5" sx={{ mb: 3, fontWeight: 700, color: 'primary.main' }}>
-          뉴스있슈~
-        </Typography>
-        
-        {stats && (
-          <Box sx={{ mb: 3 }}>
-            <Stack direction="row" spacing={1} flexWrap="wrap" gap={1}>
-              <Chip 
-                icon={<ArticleIcon fontSize="small" />} 
-                label={`${stats.total_articles}개 기사`} 
-                size="small"
-                variant="outlined"
-              />
-              <Chip 
-                icon={<Favorite fontSize="small" />} 
-                label={`${stats.total_favorites}개 즐겨찾기`} 
-                size="small"
-                variant="outlined"
-              />
-            </Stack>
-          </Box>
-        )}
-
-        <Divider sx={{ mb: 3 }} />
-
-        {/* Navigation Menu */}
-        <Stack spacing={1} sx={{ mb: 3 }}>
-          {menuItems.map((item) => (
-            <Button
-              key={item.id}
-              variant={currentView === item.id ? 'contained' : 'text'}
-              startIcon={item.icon}
-              onClick={() => onViewChange(item.id)}
-              sx={{ 
-                justifyContent: 'flex-start', 
-                py: 1.5,
-                borderRadius: 2,
-                textTransform: 'none',
-                fontSize: '14px',
-              }}
-              fullWidth
-            >
-              {item.label}
-            </Button>
-          ))}
-        </Stack>
-
-        <Divider sx={{ mb: 3 }} />
-
-        {/* Search and Filter Controls */}
-        <Typography variant="h6" sx={{ mb: 2 }}>
-          <Search fontSize="small" sx={{ mr: 1, verticalAlign: 'middle' }} />
-          검색 및 필터
-        </Typography>
-        
-        <Stack spacing={2}>
-          <TextField
-            size="small"
-            label="검색어"
-            variant="outlined"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="제목, 요약, 키워드로 검색"
-            fullWidth
-          />
-
-          <FormControl size="small" variant="outlined" fullWidth>
-            <InputLabel>뉴스 소스</InputLabel>
-            <Select
-              value={selectedSource}
-              onChange={(e) => setSelectedSource(e.target.value)}
-              label="뉴스 소스"
-            >
-              <MenuItem value="">전체</MenuItem>
-              {sources.map((source) => (
-                <MenuItem key={source} value={source}>
-                  {source}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        </Stack>
-      </Box>
-    </Paper>
-  );
+interface Message {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
 }
 
 function App() {
-  const [currentView, setCurrentView] = useState('articles');
-  const [articles, setArticles] = useState<Article[]>([]);
-  const [favorites, setFavorites] = useState<Article[]>([]);
-  const [sources, setSources] = useState<string[]>([]);
-  const [keywords, setKeywords] = useState<KeywordStats[]>([]);
-  const [networkData, setNetworkData] = useState<NetworkData>({ nodes: [], edges: [] });
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  
-  // Filters
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedSource, setSelectedSource] = useState<string>('');
+  const [messages, setMessages] = useState<Message[]>([
+    { 
+      role: 'assistant', 
+      content: '안녕하세요! 무엇을 도와드릴까요?', 
+      timestamp: new Date() 
+    }
+  ]);
+  const [userInput, setUserInput] = useState('');
+  const [processing, setProcessing] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Load initial data
+  // Auto-scroll to bottom when messages update
   useEffect(() => {
-    loadArticles();
-    loadSources();
-    loadKeywords();
-    loadNetworkData();
-    loadStats();
-  }, []);
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
-  const loadArticles = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await newsApi.getArticles({
-        search: searchTerm || undefined,
-        source: selectedSource || undefined,
-        limit: 100,
-      });
-      setArticles(data);
-    } catch (err) {
-      setError('기사를 불러오는데 실패했습니다.');
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!userInput.trim() || processing) return;
+
+    // Add user message
+    const userMessage: Message = {
+      role: 'user',
+      content: userInput,
+      timestamp: new Date()
+    };
+    
+    setMessages(prev => [...prev, userMessage]);
+    setUserInput('');
+    setProcessing(true);
+
+    // Simulate AI response (replace with actual API call)
+    setTimeout(() => {
+      const responses = [
+        '흥미로운 질문이네요! 더 자세히 설명해 주실 수 있나요?',
+        '좋은 생각입니다! 그것에 대해 더 알아보겠습니다.',
+        '네, 이해했습니다. 도움이 되었길 바랍니다!',
+        '그것은 정말 좋은 접근 방법입니다.',
+        '더 궁금한 점이 있으시면 말씀해 주세요!'
+      ];
+      
+      const assistantMessage: Message = {
+        role: 'assistant',
+        content: responses[Math.floor(Math.random() * responses.length)],
+        timestamp: new Date()
+      };
+      
+      setMessages(prev => [...prev, assistantMessage]);
+      setProcessing(false);
+    }, 1500);
   };
 
-  const loadFavorites = async () => {
-    try {
-      const data = await newsApi.getFavorites();
-      setFavorites(data);
-    } catch (err) {
-      setError('즐겨찾기를 불러오는데 실패했습니다.');
-      console.error(err);
-    }
-  };
-
-  const loadSources = async () => {
-    try {
-      const data = await newsApi.getSources();
-      setSources(data);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const loadKeywords = async () => {
-    try {
-      const data = await newsApi.getKeywordStats(50);
-      setKeywords(data);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const loadNetworkData = async () => {
-    try {
-      const data = await newsApi.getKeywordNetwork(30);
-      setNetworkData(data);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const loadStats = async () => {
-    try {
-      const data = await newsApi.getStats();
-      setStats(data);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleToggleFavorite = async (article: Article) => {
-    try {
-      if (article.is_favorite) {
-        await newsApi.removeFavorite(article.id);
-      } else {
-        await newsApi.addFavorite(article.id);
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      const form = e.currentTarget.form;
+      if (form) {
+        form.requestSubmit();
       }
-      // Reload data
-      loadArticles();
-      if (currentView === 'favorites') {
-        loadFavorites();
+    }
+  };
+
+  const clearChat = () => {
+    setMessages([
+      { 
+        role: 'assistant', 
+        content: '안녕하세요! 무엇을 도와드릴까요?', 
+        timestamp: new Date() 
       }
-    } catch (err) {
-      setError('즐겨찾기 업데이트에 실패했습니다.');
-      console.error(err);
-    }
-  };
-
-  const handleViewChange = (view: string) => {
-    setCurrentView(view);
-    if (view === 'favorites') {
-      loadFavorites();
-    }
-  };
-
-  useEffect(() => {
-    if (searchTerm !== '' || selectedSource !== '') {
-      loadArticles();
-    }
-  }, [searchTerm, selectedSource]);
-
-  const renderMainContent = () => {
-    if (loading) {
-      return (
-        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
-          <CircularProgress size={48} />
-        </Box>
-      );
-    }
-
-    switch (currentView) {
-      case 'articles':
-        return (
-          <Box>
-            <Typography variant="h4" sx={{ mb: 3 }}>
-              📰 기사 목록
-            </Typography>
-            
-            {articles.length === 0 ? (
-              <Paper sx={{ p: 4, textAlign: 'center' }}>
-                <Typography variant="h6" color="text.secondary">
-                  검색 조건에 맞는 기사가 없습니다.
-                </Typography>
-              </Paper>
-            ) : (
-              <Stack spacing={2}>
-                {articles.map((article) => (
-                  <ArticleCard
-                    key={article.id}
-                    article={article}
-                    onToggleFavorite={handleToggleFavorite}
-                  />
-                ))}
-              </Stack>
-            )}
-          </Box>
-        );
-
-      case 'favorites':
-        return (
-          <Box>
-            <Typography variant="h4" sx={{ mb: 3 }}>
-              ⭐ 즐겨찾기
-            </Typography>
-            
-            {favorites.length === 0 ? (
-              <Paper sx={{ p: 4, textAlign: 'center' }}>
-                <Typography variant="h6" color="text.secondary">
-                  즐겨찾기한 기사가 없습니다.
-                </Typography>
-              </Paper>
-            ) : (
-              <Stack spacing={2}>
-                {favorites.map((article) => (
-                  <ArticleCard
-                    key={article.id}
-                    article={article}
-                    onToggleFavorite={handleToggleFavorite}
-                  />
-                ))}
-              </Stack>
-            )}
-          </Box>
-        );
-
-      case 'keywords':
-        return (
-          <Box>
-            <Typography variant="h4" sx={{ mb: 3 }}>
-              🏷️ 키워드 분석
-            </Typography>
-            
-            <Stack spacing={4}>
-              <Card>
-                <CardContent>
-                  <KeywordCloud keywords={keywords} />
-                </CardContent>
-              </Card>
-              
-              <Card>
-                <CardContent>
-                  <KeywordNetwork data={networkData} />
-                </CardContent>
-              </Card>
-            </Stack>
-          </Box>
-        );
-
-      case 'stats':
-        return (
-          <Box>
-            <Typography variant="h4" sx={{ mb: 3 }}>
-              📊 통계
-            </Typography>
-            
-            {stats && (
-              <Stack spacing={4}>
-                <Card>
-                  <CardContent>
-                    <StatsChart stats={stats} />
-                  </CardContent>
-                </Card>
-                
-                <Card>
-                  <CardContent>
-                    <Typography variant="h6" gutterBottom>
-                      📋 요약 통계
-                    </Typography>
-                    <Stack direction="row" spacing={4} sx={{ mt: 2 }}>
-                      <Box textAlign="center">
-                        <Typography variant="h3" color="primary.main" fontWeight="bold">
-                          {stats.total_articles}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          총 기사 수
-                        </Typography>
-                      </Box>
-                      <Box textAlign="center">
-                        <Typography variant="h3" color="primary.main" fontWeight="bold">
-                          {stats.total_sources}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          소스 수
-                        </Typography>
-                      </Box>
-                      <Box textAlign="center">
-                        <Typography variant="h3" color="secondary.main" fontWeight="bold">
-                          {stats.total_favorites}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          즐겨찾기 수
-                        </Typography>
-                      </Box>
-                    </Stack>
-                  </CardContent>
-                </Card>
-              </Stack>
-            )}
-          </Box>
-        );
-
-      default:
-        return null;
-    }
+    ]);
+    setUserInput('');
+    setProcessing(false);
   };
 
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      
-      {/* Streamlit-style Layout */}
-      <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+    <div className="app-container">
+      {/* Header */}
+      <header className="app-header">
+        <h1>💬 채팅 인터페이스</h1>
+        <span className="version">v1.0</span>
+      </header>
+
+      {/* Main Layout */}
+      <div className="main-layout">
         {/* Sidebar */}
-        <Sidebar
-          currentView={currentView}
-          onViewChange={handleViewChange}
-          searchTerm={searchTerm}
-          setSearchTerm={setSearchTerm}
-          selectedSource={selectedSource}
-          setSelectedSource={setSelectedSource}
-          sources={sources}
-          stats={stats}
-        />
+        <aside className="sidebar">
+          <div className="sidebar-content">
+            <h2>채팅 설정</h2>
+            
+            <div className="sidebar-section">
+              <h3>📊 통계</h3>
+              <div className="stats-grid">
+                <div className="stat-item">
+                  <span className="stat-value">{messages.length}</span>
+                  <span className="stat-label">총 메시지</span>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-value">
+                    {messages.filter(m => m.role === 'user').length}
+                  </span>
+                  <span className="stat-label">사용자 메시지</span>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-value">
+                    {messages.filter(m => m.role === 'assistant').length}
+                  </span>
+                  <span className="stat-label">AI 응답</span>
+                </div>
+              </div>
+            </div>
 
-        {/* Main Content Area */}
-        <Box 
-          sx={{ 
-            flex: 1, 
-            ml: '320px', // Sidebar width
-            p: 4,
-            minHeight: '100vh',
-            backgroundColor: 'background.default'
-          }}
-        >
-          {error && (
-            <Alert 
-              severity="error" 
-              sx={{ mb: 3 }} 
-              onClose={() => setError(null)}
-            >
-              {error}
-            </Alert>
-          )}
+            <div className="sidebar-section">
+              <h3>⚙️ 옵션</h3>
+              <button className="btn-secondary" onClick={clearChat}>
+                🗑️ 채팅 초기화
+              </button>
+            </div>
 
-          {renderMainContent()}
-        </Box>
-      </Box>
-    </ThemeProvider>
+            <div className="sidebar-section">
+              <h3>ℹ️ 정보</h3>
+              <p className="info-text">
+                이 채팅 인터페이스는 Streamlit 스타일로 디자인되었습니다. 
+                Enter 키를 눌러 메시지를 전송하세요.
+              </p>
+            </div>
+          </div>
+        </aside>
+
+        {/* Chat Container */}
+        <main className="chat-container">
+          <div className="chat-messages">
+            {messages.map((message, index) => (
+              <div 
+                key={index} 
+                className={`message ${message.role}`}
+              >
+                <div className="message-header">
+                  <span className="message-role">
+                    {message.role === 'user' ? '👤 사용자' : '🤖 AI'}
+                  </span>
+                  <span className="message-time">
+                    {message.timestamp.toLocaleTimeString('ko-KR', {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </span>
+                </div>
+                <div className="message-content">
+                  {message.content}
+                </div>
+              </div>
+            ))}
+            
+            {processing && (
+              <div className="message assistant">
+                <div className="message-header">
+                  <span className="message-role">🤖 AI</span>
+                </div>
+                <div className="message-content">
+                  <div className="typing-indicator">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Input Form */}
+          <form className="chat-input-form" onSubmit={handleSubmit}>
+            <div className="input-group">
+              <input
+                type="text"
+                className="chat-input"
+                placeholder="메시지를 입력하세요..."
+                value={userInput}
+                onChange={(e) => setUserInput(e.target.value)}
+                onKeyDown={handleKeyPress}
+                disabled={processing}
+              />
+              <button 
+                type="submit" 
+                className="btn-primary"
+                disabled={!userInput.trim() || processing}
+              >
+                {processing ? '전송 중...' : '전송'}
+              </button>
+            </div>
+          </form>
+        </main>
+      </div>
+    </div>
   );
 }
 
-export default App
+export default App;
