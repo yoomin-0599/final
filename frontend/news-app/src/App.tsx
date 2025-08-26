@@ -100,14 +100,14 @@ function ArticleCard({ article, onToggleFavorite }: ArticleCardProps) {
     }}>
       <CardContent sx={{ p: 3 }}>
         <Grid container spacing={2}>
-          <Grid item xs={11}>
+          <Grid item xs={12} sm={11}>
             <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, mb: 2 }}>
               <Box sx={{ flex: 1 }}>
                 <Typography variant="h6" sx={{ 
                   fontWeight: 700, 
                   mb: 1.5,
                   lineHeight: 1.4,
-                  fontSize: '1.15rem'
+                  fontSize: { xs: '1.05rem', md: '1.15rem' }
                 }}>
                   <a href={article.link} target="_blank" rel="noopener noreferrer" 
                      style={{ 
@@ -121,7 +121,7 @@ function ArticleCard({ article, onToggleFavorite }: ArticleCardProps) {
               </Box>
             </Box>
             
-            <Stack direction="row" spacing={2} sx={{ mb: 2, flexWrap: 'wrap', gap: 1 }}>
+            <Stack direction="row" spacing={{ xs: 1, md: 2 }} sx={{ mb: 2, flexWrap: 'wrap', gap: 1 }}>
               <Chip
                 icon={<ArticleIcon fontSize="small" />}
                 label={article.source}
@@ -195,7 +195,7 @@ function ArticleCard({ article, onToggleFavorite }: ArticleCardProps) {
             )}
           </Grid>
           
-          <Grid item xs={1}>
+          <Grid item xs={12} sm={1} sx={{ display: 'flex', justifyContent: { xs: 'flex-end', sm: 'center' } }}>
             <Stack spacing={1} alignItems="center">
               <Tooltip title={article.is_favorite ? '즐겨찾기 해제' : '즐겨찾기 추가'}>
                 <IconButton 
@@ -265,9 +265,29 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   
-  // 사이드바
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  // 사이드바 - 데스크톱에서는 기본으로 열림
+  const [drawerOpen, setDrawerOpen] = useState(true);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 1024);
+
+  // 화면 크기 감지
+  useEffect(() => {
+    const handleResize = () => {
+      const desktop = window.innerWidth >= 1024;
+      setIsDesktop(desktop);
+      // 데스크톱에서는 사이드바 항상 열기, 모바일에서는 기본으로 닫기
+      if (desktop && !drawerOpen) {
+        setDrawerOpen(true);
+      } else if (!desktop && drawerOpen) {
+        setDrawerOpen(false);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    handleResize(); // 초기 실행
+
+    return () => window.removeEventListener('resize', handleResize);
+  }, [drawerOpen]);
 
   // 초기 데이터 로드
   useEffect(() => {
@@ -374,35 +394,43 @@ export default function App() {
             🗞️ 뉴스있슈~(News IT's Issue)
           </Typography>
           
-          <Stack direction="row" spacing={1}>
-            <Tooltip title="키보드 단축키">
+          <Stack direction="row" spacing={1} sx={{ display: { xs: 'none', sm: 'flex' } }}>
+            <Tooltip title="새로고침">
               <IconButton 
                 color="inherit" 
-                onClick={() => setShowShortcutsHelp(!showShortcutsHelp)}
+                onClick={collectNews}
+                disabled={collecting}
               >
-                <Keyboard />
+                <Refresh />
               </IconButton>
             </Tooltip>
             
+            <Tooltip title={isDesktop ? "사이드바 토글" : "필터 메뉴"}>
+              <IconButton color="inherit" onClick={() => setDrawerOpen(!drawerOpen)}>
+                <FilterList />
+              </IconButton>
+            </Tooltip>
+          </Stack>
+          
+          {/* 모바일용 축약 버튼 */}
+          <Stack direction="row" spacing={1} sx={{ display: { xs: 'flex', sm: 'none' } }}>
             <Tooltip title={isDarkMode ? '라이트 모드' : '다크 모드'}>
               <IconButton color="inherit" onClick={toggleTheme}>
                 {isDarkMode ? <LightMode /> : <DarkMode />}
               </IconButton>
             </Tooltip>
             
-            <Badge badgeContent={collecting ? '수집중' : null} color="secondary">
-              <Tooltip title="새로고침">
-                <IconButton 
-                  color="inherit" 
-                  onClick={collectNews}
-                  disabled={collecting}
-                >
-                  <Refresh />
-                </IconButton>
-              </Tooltip>
-            </Badge>
+            <Tooltip title="새로고침">
+              <IconButton 
+                color="inherit" 
+                onClick={collectNews}
+                disabled={collecting}
+              >
+                <Refresh />
+              </IconButton>
+            </Tooltip>
             
-            <Tooltip title="필터">
+            <Tooltip title="필터 메뉴">
               <IconButton color="inherit" onClick={() => setDrawerOpen(!drawerOpen)}>
                 <FilterList />
               </IconButton>
@@ -413,12 +441,21 @@ export default function App() {
       
       {/* 사이드바 (필터) */}
       <Drawer
-        variant="persistent"
+        variant={isDesktop ? "persistent" : "temporary"}
         open={drawerOpen}
+        onClose={() => !isDesktop && setDrawerOpen(false)}
         sx={{
           width: 300,
           flexShrink: 0,
-          '& .MuiDrawer-paper': { width: 300, boxSizing: 'border-box', pt: 8 },
+          '& .MuiDrawer-paper': { 
+            width: 300, 
+            boxSizing: 'border-box', 
+            pt: 8,
+            ...(isDesktop && {
+              position: 'fixed',
+              height: '100vh',
+            })
+          },
         }}
       >
         <Box sx={{ p: 2 }}>
@@ -505,8 +542,14 @@ export default function App() {
           </Button>
 
           {/* 통계 */}
-          <Paper sx={{ p: 2, bgcolor: 'grey.50' }}>
-            <Typography variant="body2">
+          <Paper sx={{ 
+            p: 2, 
+            bgcolor: theme => theme.palette.mode === 'dark' ? 'grey.800' : 'grey.50',
+            border: theme => theme.palette.mode === 'dark' ? '1px solid rgba(255, 255, 255, 0.12)' : 'none'
+          }}>
+            <Typography variant="body2" sx={{ 
+              color: theme => theme.palette.mode === 'dark' ? 'grey.100' : 'text.primary'
+            }}>
               📊 총 {stats.totalArticles}건의 뉴스<br/>
               📰 {stats.totalSources}개 소스<br/>
               ⭐ {stats.totalFavorites}개 즐겨찾기<br/>
@@ -519,10 +562,11 @@ export default function App() {
       {/* 메인 컨텐츠 */}
       <Box sx={{ 
         flexGrow: 1, 
-        p: 3, 
-        pt: 12,
-        ml: drawerOpen ? '300px' : 0,
-        transition: 'margin-left 0.3s'
+        p: { xs: 2, md: 3 }, 
+        pt: { xs: 10, md: 12 },
+        ml: (isDesktop && drawerOpen) ? '300px' : 0,
+        transition: 'margin-left 0.3s',
+        minHeight: '100vh'
       }}>
         <Typography variant="body1" sx={{ mb: 2, color: 'text.secondary' }}>
           **IT/공학 뉴스 수집, 분석, 시각화 대시보드**
@@ -530,11 +574,22 @@ export default function App() {
 
         {/* 탭 */}
         <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
-          <Tabs value={tabValue} onChange={handleTabChange}>
-            <Tab icon={<ArticleIcon />} label="📰 뉴스 목록" />
-            <Tab icon={<Analytics />} label="📊 키워드 분석" />
-            <Tab icon={<Cloud />} label="☁️ 워드클라우드" />
-            <Tab icon={<Favorite />} label="⭐ 즐겨찾기" />
+          <Tabs 
+            value={tabValue} 
+            onChange={handleTabChange}
+            variant={isDesktop ? "standard" : "scrollable"}
+            scrollButtons={isDesktop ? false : "auto"}
+            sx={{
+              '& .MuiTab-root': {
+                minWidth: isDesktop ? 120 : 80,
+                fontSize: { xs: '0.8rem', md: '0.875rem' }
+              }
+            }}
+          >
+            <Tab icon={<ArticleIcon />} label={isDesktop ? "📰 뉴스 목록" : "뉴스"} />
+            <Tab icon={<Analytics />} label={isDesktop ? "📊 키워드 분석" : "분석"} />
+            <Tab icon={<Cloud />} label={isDesktop ? "☁️ 워드클라우드" : "워드클라우드"} />
+            <Tab icon={<Favorite />} label={isDesktop ? "⭐ 즐겨찾기" : "즐겨찾기"} />
           </Tabs>
         </Box>
 
