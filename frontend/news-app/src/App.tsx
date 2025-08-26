@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Typography,
   Box,
@@ -31,6 +31,8 @@ import {
   ListItemText,
   ListItemIcon,
   Pagination,
+  Tooltip,
+  Badge,
 } from '@mui/material';
 import {
   Article as ArticleIcon,
@@ -43,27 +45,23 @@ import {
   FilterList,
   TrendingUp,
   OpenInNew,
+  DarkMode,
+  LightMode,
+  AccessTime,
+  Keyboard,
+  Visibility,
 } from '@mui/icons-material';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 
 import { newsService } from './services/newsService';
 import type { Article, KeywordStats } from './services/newsService';
 import { KeywordCloud } from './components/KeywordCloud';
 import { KeywordNetwork } from './components/KeywordNetwork';
+import { useThemeProvider } from './hooks/useTheme';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { calculateReadingTime, formatReadingTime } from './utils/readingTime';
 
-const theme = createTheme({
-  palette: {
-    primary: { main: '#1976d2' },
-    secondary: { main: '#dc004e' },
-    background: { default: '#f5f5f5', paper: '#ffffff' },
-  },
-  typography: {
-    h4: { fontWeight: 600, marginBottom: '16px' },
-    h5: { fontWeight: 500, marginBottom: '12px' },
-    h6: { fontWeight: 500, marginBottom: '8px' },
-  },
-});
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -80,68 +78,143 @@ function TabPanel(props: TabPanelProps) {
   );
 }
 
-// 개별 기사 카드 컴포넌트 (스트림릿 스타일)
+// 개별 기사 카드 컴포넌트 (개선된 디자인)
 interface ArticleCardProps {
   article: Article;
   onToggleFavorite: (id: number) => void;
 }
 
 function ArticleCard({ article, onToggleFavorite }: ArticleCardProps) {
+  const readingTime = calculateReadingTime((article.title || '') + (article.summary || ''));
+  
   return (
-    <Card sx={{ mb: 2, transition: 'all 0.2s', '&:hover': { elevation: 4 } }}>
-      <CardContent>
+    <Card sx={{ 
+      mb: 2.5, 
+      transition: 'all 0.3s ease-in-out', 
+      '&:hover': { 
+        transform: 'translateY(-2px)',
+        boxShadow: '0 8px 25px rgba(0, 0, 0, 0.15)'
+      },
+      borderRadius: 3,
+      overflow: 'hidden'
+    }}>
+      <CardContent sx={{ p: 3 }}>
         <Grid container spacing={2}>
           <Grid item xs={11}>
-            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1 }}>
-              <a href={article.link} target="_blank" rel="noopener noreferrer" 
-                 style={{ textDecoration: 'none', color: 'inherit' }}>
-                {article.title}
-                <OpenInNew fontSize="small" sx={{ ml: 0.5, verticalAlign: 'top' }} />
-              </a>
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, mb: 2 }}>
+              <Box sx={{ flex: 1 }}>
+                <Typography variant="h6" sx={{ 
+                  fontWeight: 700, 
+                  mb: 1.5,
+                  lineHeight: 1.4,
+                  fontSize: '1.15rem'
+                }}>
+                  <a href={article.link} target="_blank" rel="noopener noreferrer" 
+                     style={{ 
+                       textDecoration: 'none', 
+                       color: 'inherit'
+                     }}>
+                    {article.title}
+                    <OpenInNew fontSize="small" sx={{ ml: 1, verticalAlign: 'middle', opacity: 0.7 }} />
+                  </a>
+                </Typography>
+              </Box>
+            </Box>
             
-            <Stack direction="row" spacing={2} sx={{ mb: 1 }}>
-              <Typography variant="body2" color="primary" fontWeight="bold">
-                📰 {article.source}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                📅 {new Date(article.published).toLocaleString()}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                🔗 ID: {article.id}
-              </Typography>
+            <Stack direction="row" spacing={2} sx={{ mb: 2, flexWrap: 'wrap', gap: 1 }}>
+              <Chip
+                icon={<ArticleIcon fontSize="small" />}
+                label={article.source}
+                variant="outlined"
+                size="small"
+                color="primary"
+              />
+              <Chip
+                icon={<AccessTime fontSize="small" />}
+                label={new Date(article.published).toLocaleDateString('ko-KR')}
+                variant="outlined"
+                size="small"
+              />
+              <Chip
+                icon={<Visibility fontSize="small" />}
+                label={formatReadingTime(readingTime)}
+                variant="outlined"
+                size="small"
+                color="secondary"
+              />
             </Stack>
 
             {article.summary && (
-              <Typography variant="body2" sx={{ mb: 1, lineHeight: 1.6 }}>
-                {article.summary}
+              <Typography variant="body1" sx={{ 
+                mb: 2, 
+                lineHeight: 1.7,
+                color: 'text.secondary',
+                fontSize: '0.95rem'
+              }}>
+                {article.summary.length > 200 
+                  ? `${article.summary.substring(0, 200)}...` 
+                  : article.summary}
               </Typography>
             )}
 
             {article.keywords && article.keywords.length > 0 && (
-              <Box>
-                <Typography variant="body2" component="span" fontWeight="bold">
-                  🏷️ 키워드:{' '}
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="body2" component="div" sx={{ mb: 1, fontWeight: 600 }}>
+                  🏷️ 키워드
                 </Typography>
-                {article.keywords.slice(0, 10).map((keyword, index) => (
-                  <Chip 
-                    key={index} 
-                    label={keyword} 
-                    size="small" 
-                    sx={{ mr: 0.5, mb: 0.5 }} 
-                  />
-                ))}
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                  {article.keywords.slice(0, 8).map((keyword, index) => (
+                    <Chip 
+                      key={index} 
+                      label={keyword} 
+                      size="small"
+                      variant="outlined"
+                      sx={{ 
+                        fontSize: '0.75rem',
+                        height: 24,
+                        borderRadius: 3,
+                        '&:hover': {
+                          backgroundColor: 'primary.main',
+                          color: 'primary.contrastText',
+                          borderColor: 'primary.main'
+                        }
+                      }} 
+                    />
+                  ))}
+                  {article.keywords.length > 8 && (
+                    <Chip 
+                      label={`+${article.keywords.length - 8}`}
+                      size="small"
+                      variant="filled"
+                      color="default"
+                      sx={{ fontSize: '0.75rem', height: 24 }}
+                    />
+                  )}
+                </Box>
               </Box>
             )}
           </Grid>
           
           <Grid item xs={1}>
-            <IconButton 
-              onClick={() => onToggleFavorite(article.id)}
-              color={article.is_favorite ? "secondary" : "default"}
-            >
-              {article.is_favorite ? <Favorite /> : <FavoriteBorder />}
-            </IconButton>
+            <Stack spacing={1} alignItems="center">
+              <Tooltip title={article.is_favorite ? '즐겨찾기 해제' : '즐겨찾기 추가'}>
+                <IconButton 
+                  onClick={() => onToggleFavorite(article.id)}
+                  color={article.is_favorite ? "secondary" : "default"}
+                  sx={{
+                    transition: 'all 0.2s',
+                    '&:hover': {
+                      transform: 'scale(1.1)'
+                    }
+                  }}
+                >
+                  {article.is_favorite ? <Favorite /> : <FavoriteBorder />}
+                </IconButton>
+              </Tooltip>
+              <Typography variant="caption" color="text.secondary">
+                #{article.id}
+              </Typography>
+            </Stack>
           </Grid>
         </Grid>
       </CardContent>
@@ -149,9 +222,28 @@ function ArticleCard({ article, onToggleFavorite }: ArticleCardProps) {
   );
 }
 
+// 키보드 단축키 도움말 컴포넌트
+function KeyboardShortcutsHelp() {
+  return (
+    <Paper sx={{ p: 2, mb: 2, bgcolor: 'action.hover' }}>
+      <Typography variant="body2" sx={{ mb: 1, fontWeight: 600 }}>
+        ⌨️ 키보드 단축키
+      </Typography>
+      <Stack spacing={0.5}>
+        <Typography variant="body2">• Ctrl/Cmd + R: 뉴스 새로고침</Typography>
+        <Typography variant="body2">• Ctrl/Cmd + D: 다크모드 토글</Typography>
+        <Typography variant="body2">• Ctrl/Cmd + K: 검색 포커스</Typography>
+        <Typography variant="body2">• Ctrl/Cmd + ←/→: 탭 전환</Typography>
+      </Stack>
+    </Paper>
+  );
+}
+
 // 메인 App 컴포넌트
 export default function App() {
+  const { isDarkMode, toggleTheme, theme, ThemeContext } = useThemeProvider();
   const [tabValue, setTabValue] = useState(0);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [articles, setArticles] = useState<Article[]>([]);
   const [filteredArticles, setFilteredArticles] = useState<Article[]>([]);
   const [keywordStats, setKeywordStats] = useState<KeywordStats[]>([]);
@@ -175,6 +267,7 @@ export default function App() {
   
   // 사이드바
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
 
   // 초기 데이터 로드
   useEffect(() => {
@@ -244,6 +337,20 @@ export default function App() {
     setTabValue(newValue);
   };
 
+  // 검색 포커스
+  const focusSearch = () => {
+    searchInputRef.current?.focus();
+  };
+
+  // 키보드 단축키 설정
+  useKeyboardShortcuts({
+    onRefresh: collectNews,
+    onToggleTheme: toggleTheme,
+    onSearch: () => searchInputRef.current?.focus(),
+    onNextTab: () => setTabValue(prev => (prev + 1) % 4),
+    onPrevTab: () => setTabValue(prev => (prev - 1 + 4) % 4),
+  });
+
   // 페이지네이션 계산
   const totalPages = Math.ceil(filteredArticles.length / itemsPerPage);
   const currentArticles = filteredArticles.slice(
@@ -256,8 +363,9 @@ export default function App() {
   const stats = newsService.getStats();
 
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
+    <ThemeContext.Provider value={{ isDarkMode, toggleTheme, theme }}>
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
       
       {/* 상단 앱바 */}
       <AppBar position="fixed" sx={{ zIndex: theme => theme.zIndex.drawer + 1 }}>
@@ -265,9 +373,41 @@ export default function App() {
           <Typography variant="h5" component="div" sx={{ flexGrow: 1, fontWeight: 'bold' }}>
             🗞️ 뉴스있슈~(News IT's Issue)
           </Typography>
-          <IconButton color="inherit" onClick={() => setDrawerOpen(!drawerOpen)}>
-            <FilterList />
-          </IconButton>
+          
+          <Stack direction="row" spacing={1}>
+            <Tooltip title="키보드 단축키">
+              <IconButton 
+                color="inherit" 
+                onClick={() => setShowShortcutsHelp(!showShortcutsHelp)}
+              >
+                <Keyboard />
+              </IconButton>
+            </Tooltip>
+            
+            <Tooltip title={isDarkMode ? '라이트 모드' : '다크 모드'}>
+              <IconButton color="inherit" onClick={toggleTheme}>
+                {isDarkMode ? <LightMode /> : <DarkMode />}
+              </IconButton>
+            </Tooltip>
+            
+            <Badge badgeContent={collecting ? '수집중' : null} color="secondary">
+              <Tooltip title="새로고침">
+                <IconButton 
+                  color="inherit" 
+                  onClick={collectNews}
+                  disabled={collecting}
+                >
+                  <Refresh />
+                </IconButton>
+              </Tooltip>
+            </Badge>
+            
+            <Tooltip title="필터">
+              <IconButton color="inherit" onClick={() => setDrawerOpen(!drawerOpen)}>
+                <FilterList />
+              </IconButton>
+            </Tooltip>
+          </Stack>
         </Toolbar>
       </AppBar>
       
@@ -282,6 +422,8 @@ export default function App() {
         }}
       >
         <Box sx={{ p: 2 }}>
+          {showShortcutsHelp && <KeyboardShortcutsHelp />}
+          
           <Typography variant="h6" gutterBottom>🔧 필터링</Typography>
           
           {/* 뉴스 소스 */}
@@ -302,8 +444,9 @@ export default function App() {
           {/* 키워드 검색 */}
           <TextField
             fullWidth
+            inputRef={searchInputRef}
             label="키워드 검색"
-            placeholder="예: AI, 반도체, 5G"
+            placeholder="예: AI, 반도체, 5G (Ctrl+K)"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             sx={{ mb: 2 }}
@@ -520,6 +663,7 @@ export default function App() {
           })()}
         </TabPanel>
       </Box>
-    </ThemeProvider>
+      </ThemeProvider>
+    </ThemeContext.Provider>
   );
 }
