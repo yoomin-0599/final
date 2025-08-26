@@ -48,6 +48,13 @@ export interface Stats {
   }>;
 }
 
+export interface Collection {
+  name: string;
+  count: number;
+  rules: Record<string, any>;
+  articles: Article[];
+}
+
 export const newsApi = {
   getArticles: async (params?: {
     limit?: number;
@@ -55,6 +62,8 @@ export const newsApi = {
     source?: string;
     search?: string;
     favorites_only?: boolean;
+    date_from?: string;
+    date_to?: string;
   }) => {
     const response = await api.get<Article[]>('/api/articles', { params });
     return response.data;
@@ -98,6 +107,35 @@ export const newsApi = {
 
   getStats: async () => {
     const response = await api.get<Stats>('/api/stats');
+    return response.data;
+  },
+
+  // 새로운 기능들
+  collectNews: async (days: number = 30, maxPages: number = 5) => {
+    const response = await api.post('/api/collect-news', {
+      days,
+      max_pages: maxPages,
+    });
+    return response.data;
+  },
+
+  getCollections: async () => {
+    const response = await api.get<Collection[]>('/api/collections');
+    return response.data;
+  },
+
+  createCollection: async (name: string, rules: Record<string, any> = {}) => {
+    const response = await api.post('/api/collections', { name, rules });
+    return response.data;
+  },
+
+  extractKeywords: async (articleId: number) => {
+    const response = await api.post(`/api/extract-keywords/${articleId}`);
+    return response.data;
+  },
+
+  translateArticle: async (articleId: number) => {
+    const response = await api.post(`/api/translate/${articleId}`);
     return response.data;
   },
 };

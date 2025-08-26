@@ -23,12 +23,16 @@ import {
   Analytics,
   Cloud,
   Search,
+  Collections,
+  Download,
+  Translate,
+  SmartToy,
 } from '@mui/icons-material';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 
 import { newsApi } from './api/newsApi';
-import type { Article, KeywordStats, NetworkData, Stats } from './api/newsApi';
+import type { Article, KeywordStats, NetworkData, Stats, Collection } from './api/newsApi';
 import { ArticleCard } from './components/ArticleCard';
 import { KeywordCloud } from './components/KeywordCloud';
 import { KeywordNetwork } from './components/KeywordNetwork';
@@ -95,6 +99,10 @@ interface SidebarProps {
   setSelectedSource: (source: string) => void;
   sources: string[];
   stats: Stats | null;
+  dateFrom: string;
+  setDateFrom: (date: string) => void;
+  dateTo: string;
+  setDateTo: (date: string) => void;
 }
 
 function Sidebar({ 
@@ -105,13 +113,19 @@ function Sidebar({
   selectedSource, 
   setSelectedSource, 
   sources, 
-  stats 
+  stats,
+  dateFrom,
+  setDateFrom,
+  dateTo,
+  setDateTo
 }: SidebarProps) {
   const menuItems = [
     { id: 'articles', label: '기사 목록', icon: <ArticleIcon /> },
     { id: 'favorites', label: '즐겨찾기', icon: <Favorite /> },
+    { id: 'collections', label: '컬렉션', icon: <Collections /> },
     { id: 'keywords', label: '키워드 분석', icon: <Cloud /> },
     { id: 'stats', label: '통계', icon: <Analytics /> },
+    { id: 'tools', label: '도구', icon: <SmartToy /> },
   ];
 
   return (
@@ -209,6 +223,28 @@ function Sidebar({
               ))}
             </Select>
           </FormControl>
+
+          <TextField
+            size="small"
+            label="시작 날짜"
+            type="date"
+            variant="outlined"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            fullWidth
+            InputLabelProps={{ shrink: true }}
+          />
+
+          <TextField
+            size="small"
+            label="종료 날짜"
+            type="date"
+            variant="outlined"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            fullWidth
+            InputLabelProps={{ shrink: true }}
+          />
         </Stack>
       </Box>
     </Paper>
@@ -223,12 +259,16 @@ function App() {
   const [keywords, setKeywords] = useState<KeywordStats[]>([]);
   const [networkData, setNetworkData] = useState<NetworkData>({ nodes: [], edges: [] });
   const [stats, setStats] = useState<Stats | null>(null);
+  const [collections, setCollections] = useState<Collection[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSource, setSelectedSource] = useState<string>('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   // Load initial data
   useEffect(() => {
@@ -237,6 +277,7 @@ function App() {
     loadKeywords();
     loadNetworkData();
     loadStats();
+    loadCollections();
   }, []);
 
   const loadArticles = async () => {
@@ -246,6 +287,8 @@ function App() {
       const data = await newsApi.getArticles({
         search: searchTerm || undefined,
         source: selectedSource || undefined,
+        date_from: dateFrom || undefined,
+        date_to: dateTo || undefined,
         limit: 100,
       });
       setArticles(data);
@@ -303,6 +346,51 @@ function App() {
     }
   };
 
+  const loadCollections = async () => {
+    try {
+      const data = await newsApi.getCollections();
+      setCollections(data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleCollectNews = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const result = await newsApi.collectNews(30, 5);
+      setSuccess('뉴스 수집을 시작했습니다. 완료되면 새로고침하세요.');
+    } catch (err) {
+      setError('뉴스 수집에 실패했습니다.');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleExtractKeywords = async (articleId: number) => {
+    try {
+      const result = await newsApi.extractKeywords(articleId);
+      setSuccess(`키워드가 추출되었습니다: ${result.keywords.join(', ')}`);
+      loadArticles(); // 새로고침
+    } catch (err) {
+      setError('키워드 추출에 실패했습니다.');
+      console.error(err);
+    }
+  };
+
+  const handleTranslateArticle = async (articleId: number) => {
+    try {
+      const result = await newsApi.translateArticle(articleId);
+      setSuccess('번역이 완료되었습니다.');
+      loadArticles(); // 새로고침
+    } catch (err) {
+      setError('번역에 실패했습니다.');
+      console.error(err);
+    }
+  };
+
   const handleToggleFavorite = async (article: Article) => {
     try {
       if (article.is_favorite) {
@@ -325,14 +413,16 @@ function App() {
     setCurrentView(view);
     if (view === 'favorites') {
       loadFavorites();
+    } else if (view === 'collections') {
+      loadCollections();
     }
   };
 
   useEffect(() => {
-    if (searchTerm !== '' || selectedSource !== '') {
+    if (searchTerm !== '' || selectedSource !== '' || dateFrom !== '' || dateTo !== '') {
       loadArticles();
     }
-  }, [searchTerm, selectedSource]);
+  }, [searchTerm, selectedSource, dateFrom, dateTo]);
 
   const renderMainContent = () => {
     if (loading) {
@@ -421,6 +511,107 @@ function App() {
           </Box>
         );
 
+      case 'collections':
+        return (
+          <Box>
+            <Typography variant="h4" sx={{ mb: 3 }}>
+              📁 테마별 컬렉션
+            </Typography>
+            
+            {collections.length === 0 ? (
+              <Paper sx={{ p: 4, textAlign: 'center' }}>
+                <Typography variant="h6" color="text.secondary">
+                  컬렉션이 없습니다.
+                </Typography>
+              </Paper>
+            ) : (
+              <Stack spacing={3}>
+                {collections.map((collection) => (
+                  <Card key={collection.name}>
+                    <CardContent>
+                      <Typography variant="h5" gutterBottom>
+                        {collection.name}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                        {collection.count}개 기사
+                      </Typography>
+                      
+                      {collection.articles.length > 0 && (
+                        <Stack spacing={1}>
+                          {collection.articles.slice(0, 5).map((article: any) => (
+                            <Box key={article.id} sx={{ p: 1, bgcolor: 'grey.50', borderRadius: 1 }}>
+                              <Typography variant="body2">{article.title}</Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {article.source} - {new Date(article.published).toLocaleDateString('ko-KR')}
+                              </Typography>
+                            </Box>
+                          ))}
+                          {collection.articles.length > 5 && (
+                            <Typography variant="caption" color="text.secondary">
+                              +{collection.articles.length - 5}개 더
+                            </Typography>
+                          )}
+                        </Stack>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </Stack>
+            )}
+          </Box>
+        );
+
+      case 'tools':
+        return (
+          <Box>
+            <Typography variant="h4" sx={{ mb: 3 }}>
+              🛠️ 도구
+            </Typography>
+            
+            <Stack spacing={3}>
+              <Card>
+                <CardContent>
+                  <Typography variant="h6" gutterBottom>
+                    <Download sx={{ mr: 1, verticalAlign: 'middle' }} />
+                    뉴스 수집
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    RSS 피드에서 최신 뉴스를 수집합니다.
+                  </Typography>
+                  <Button 
+                    variant="contained" 
+                    onClick={handleCollectNews}
+                    disabled={loading}
+                  >
+                    뉴스 수집 시작
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent>
+                  <Typography variant="h6" gutterBottom>
+                    <SmartToy sx={{ mr: 1, verticalAlign: 'middle' }} />
+                    AI 분석 도구
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    기사의 키워드를 추출하고 번역합니다. (개별 기사에서 사용 가능)
+                  </Typography>
+                  <Stack direction="row" spacing={1}>
+                    <Button variant="outlined" size="small">
+                      키워드 추출
+                    </Button>
+                    <Button variant="outlined" size="small">
+                      <Translate sx={{ mr: 0.5 }} fontSize="small" />
+                      번역
+                    </Button>
+                  </Stack>
+                </CardContent>
+              </Card>
+            </Stack>
+          </Box>
+        );
+
       case 'stats':
         return (
           <Box>
@@ -495,6 +686,10 @@ function App() {
           setSelectedSource={setSelectedSource}
           sources={sources}
           stats={stats}
+          dateFrom={dateFrom}
+          setDateFrom={setDateFrom}
+          dateTo={dateTo}
+          setDateTo={setDateTo}
         />
 
         {/* Main Content Area */}
@@ -514,6 +709,16 @@ function App() {
               onClose={() => setError(null)}
             >
               {error}
+            </Alert>
+          )}
+
+          {success && (
+            <Alert 
+              severity="success" 
+              sx={{ mb: 3 }} 
+              onClose={() => setSuccess(null)}
+            >
+              {success}
             </Alert>
           )}
 
