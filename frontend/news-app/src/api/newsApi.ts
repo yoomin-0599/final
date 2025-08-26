@@ -15,7 +15,7 @@ export interface Article {
   published: string;
   source: string;
   summary?: string;
-  keywords?: string;
+  keywords?: string | string[];
   created_at?: string;
   is_favorite: boolean;
 }

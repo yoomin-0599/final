@@ -29,7 +29,11 @@ export const ArticleCard: React.FC<ArticleCardProps> = ({
   article,
   onToggleFavorite,
 }) => {
-  const keywords = article.keywords?.split(',').filter(k => k.trim()) || [];
+  const keywords = typeof article.keywords === 'string' 
+    ? article.keywords.split(',').filter(k => k.trim()) 
+    : Array.isArray(article.keywords) 
+      ? article.keywords.filter(k => k.trim())
+      : [];
   const publishedDate = new Date(article.published);
 
   return (

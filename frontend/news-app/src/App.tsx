@@ -362,7 +362,11 @@ export default function App() {
       filtered = filtered.filter(article => 
         article.title?.toLowerCase().includes(searchLower) ||
         article.summary?.toLowerCase().includes(searchLower) ||
-        article.keywords?.toLowerCase().includes(searchLower)
+        (typeof article.keywords === 'string' 
+          ? article.keywords.toLowerCase().includes(searchLower)
+          : Array.isArray(article.keywords) 
+            ? article.keywords.some(k => k.toLowerCase().includes(searchLower))
+            : false)
       );
     }
 
