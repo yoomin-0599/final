@@ -4,10 +4,13 @@ services:
     runtime: python
     env: python
     buildCommand: |
+      # Use Python 3.11 to avoid compatibility issues
+      python --version
+      
       # Backend dependencies
       cd backend
-      pip install --upgrade pip setuptools wheel
-      pip install -r requirements.txt
+      python -m pip install --upgrade pip==24.0 setuptools==69.5.1 wheel
+      python -m pip install -r requirements.txt
       
       # Frontend build
       cd ../frontend/news-app
@@ -23,7 +26,7 @@ services:
       
     envVars:
       - key: PYTHON_VERSION
-        value: 3.11.9
+        value: "3.11"
       - key: NODE_VERSION
         value: 18
       - key: DB_PATH
