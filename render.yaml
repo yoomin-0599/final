@@ -4,12 +4,35 @@ services:
     runtime: python
     env: python
     buildCommand: |
+      # Backend dependencies
       cd backend
       pip install --upgrade pip setuptools wheel
       pip install -r requirements.txt
-    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
+      
+      # Frontend build
+      cd ../frontend/news-app
+      npm install
+      npm run build
+      
+    startCommand: |
+      cd backend
+      # Initialize database and collect initial news
+      python -c "from news_collector import init_db, collect_all_news; init_db(); print('DB initialized')"
+      # Start FastAPI server
+      uvicorn main:app --host 0.0.0.0 --port $PORT
+      
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
       - key: NODE_VERSION
         value: 18
+      - key: DB_PATH
+        value: backend/news.db
+      - key: ENABLE_SUMMARY
+        value: "0"
+      - key: ENABLE_HTTP_CACHE
+        value: "1"
+      - key: MAX_RESULTS
+        value: "10"
+      - key: PARALLEL_MAX_WORKERS
+        value: "4"
