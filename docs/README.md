@@ -8,6 +8,7 @@
 - [배포 가이드](./deployment/DEPLOYMENT_GUIDE.md)
 - [개발 워크플로우](./development/DEVELOPMENT_WORKFLOW.md)
 - [변경 이력](./CHANGELOG.md)
+- [테마 시스템 개발 일지](./THEME_SYSTEM_DEVELOPMENT_LOG.md)
 
 ## 🚀 빠른 시작
 
@@ -35,10 +36,11 @@ npm run dev
 ## 📊 프로젝트 통계
 
 - **개발 기간**: 2025년 8월
-- **커밋 수**: 6개 주요 커밋
-- **코드 라인**: 6,500+ 라인
-- **파일 수**: 35개
-- **기술 스택**: React 19 + TypeScript + FastAPI + SQLite
+- **최신 버전**: v2.1.0 (테마 시스템 및 백엔드 통합)
+- **커밋 수**: 9개 주요 커밋 (3개 추가)
+- **코드 라인**: 7,200+ 라인 (700+ 라인 추가)
+- **파일 수**: 40개 (5개 파일 추가)
+- **기술 스택**: React 19 + TypeScript + FastAPI + SQLite + Material-UI
 
 ## 🛠️ 주요 기능
 
