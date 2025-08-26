@@ -4,204 +4,160 @@ import './App.css';
 interface Message {
   role: 'user' | 'assistant';
   content: string;
-  timestamp: Date;
 }
 
 function App() {
-  const [messages, setMessages] = useState<Message[]>([
-    { 
-      role: 'assistant', 
-      content: '안녕하세요! 무엇을 도와드릴까요?', 
-      timestamp: new Date() 
-    }
-  ]);
-  const [userInput, setUserInput] = useState('');
-  const [processing, setProcessing] = useState(false);
+  // 세션 상태 초기화
+  const [messages, setMessages] = useState<Message[]>(() => {
+    // 초기 메시지 설정
+    return [
+      { role: 'assistant', content: '안녕하세요! 무엇을 도와드릴까요?' }
+    ];
+  });
+  const [inputValue, setInputValue] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-scroll to bottom when messages update
+  // 메시지가 추가될 때마다 스크롤
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!userInput.trim() || processing) return;
+  // 입력 필드에 포커스
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
 
-    // Add user message
-    const userMessage: Message = {
-      role: 'user',
-      content: userInput,
-      timestamp: new Date()
-    };
-    
-    setMessages(prev => [...prev, userMessage]);
-    setUserInput('');
-    setProcessing(true);
-
-    // Simulate AI response (replace with actual API call)
-    setTimeout(() => {
-      const responses = [
-        '흥미로운 질문이네요! 더 자세히 설명해 주실 수 있나요?',
-        '좋은 생각입니다! 그것에 대해 더 알아보겠습니다.',
-        '네, 이해했습니다. 도움이 되었길 바랍니다!',
-        '그것은 정말 좋은 접근 방법입니다.',
-        '더 궁금한 점이 있으시면 말씀해 주세요!'
-      ];
+  const handleSendMessage = () => {
+    if (inputValue.trim()) {
+      // 사용자 메시지 추가
+      const userMessage: Message = { role: 'user', content: inputValue };
+      setMessages(prev => [...prev, userMessage]);
       
-      const assistantMessage: Message = {
-        role: 'assistant',
-        content: responses[Math.floor(Math.random() * responses.length)],
-        timestamp: new Date()
-      };
+      // 입력 필드 초기화
+      const userInput = inputValue;
+      setInputValue('');
       
-      setMessages(prev => [...prev, assistantMessage]);
-      setProcessing(false);
-    }, 1500);
-  };
-
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      const form = e.currentTarget.form;
-      if (form) {
-        form.requestSubmit();
-      }
+      // AI 응답 생성 (시뮬레이션)
+      setTimeout(() => {
+        const assistantMessage: Message = { 
+          role: 'assistant', 
+          content: `"${userInput}"에 대한 응답입니다. 어떻게 도와드릴까요?` 
+        };
+        setMessages(prev => [...prev, assistantMessage]);
+      }, 1000);
     }
   };
 
-  const clearChat = () => {
-    setMessages([
-      { 
-        role: 'assistant', 
-        content: '안녕하세요! 무엇을 도와드릴까요?', 
-        timestamp: new Date() 
-      }
-    ]);
-    setUserInput('');
-    setProcessing(false);
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSendMessage();
+    }
   };
 
   return (
-    <div className="app-container">
-      {/* Header */}
-      <header className="app-header">
-        <h1>💬 채팅 인터페이스</h1>
-        <span className="version">v1.0</span>
-      </header>
+    <div className="streamlit-container">
+      {/* 메인 영역 */}
+      <div className="main-area">
+        {/* 헤더 */}
+        <div className="main-header">
+          <h1>💬 채팅 인터페이스</h1>
+        </div>
 
-      {/* Main Layout */}
-      <div className="main-layout">
-        {/* Sidebar */}
-        <aside className="sidebar">
-          <div className="sidebar-content">
-            <h2>채팅 설정</h2>
-            
-            <div className="sidebar-section">
-              <h3>📊 통계</h3>
-              <div className="stats-grid">
-                <div className="stat-item">
-                  <span className="stat-value">{messages.length}</span>
-                  <span className="stat-label">총 메시지</span>
-                </div>
-                <div className="stat-item">
-                  <span className="stat-value">
-                    {messages.filter(m => m.role === 'user').length}
-                  </span>
-                  <span className="stat-label">사용자 메시지</span>
-                </div>
-                <div className="stat-item">
-                  <span className="stat-value">
-                    {messages.filter(m => m.role === 'assistant').length}
-                  </span>
-                  <span className="stat-label">AI 응답</span>
-                </div>
+        {/* 채팅 메시지 영역 */}
+        <div className="chat-container">
+          {messages.map((message, index) => (
+            <div key={index} className={`chat-message-container ${message.role}`}>
+              <div className="message-avatar">
+                {message.role === 'user' ? '👤' : '🤖'}
               </div>
-            </div>
-
-            <div className="sidebar-section">
-              <h3>⚙️ 옵션</h3>
-              <button className="btn-secondary" onClick={clearChat}>
-                🗑️ 채팅 초기화
-              </button>
-            </div>
-
-            <div className="sidebar-section">
-              <h3>ℹ️ 정보</h3>
-              <p className="info-text">
-                이 채팅 인터페이스는 Streamlit 스타일로 디자인되었습니다. 
-                Enter 키를 눌러 메시지를 전송하세요.
-              </p>
-            </div>
-          </div>
-        </aside>
-
-        {/* Chat Container */}
-        <main className="chat-container">
-          <div className="chat-messages">
-            {messages.map((message, index) => (
-              <div 
-                key={index} 
-                className={`message ${message.role}`}
-              >
-                <div className="message-header">
-                  <span className="message-role">
-                    {message.role === 'user' ? '👤 사용자' : '🤖 AI'}
-                  </span>
-                  <span className="message-time">
-                    {message.timestamp.toLocaleTimeString('ko-KR', {
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </span>
+              <div className="message-content-wrapper">
+                <div className="message-role">
+                  {message.role === 'user' ? '사용자' : 'AI'}
                 </div>
                 <div className="message-content">
                   {message.content}
                 </div>
               </div>
-            ))}
-            
-            {processing && (
-              <div className="message assistant">
-                <div className="message-header">
-                  <span className="message-role">🤖 AI</span>
-                </div>
-                <div className="message-content">
-                  <div className="typing-indicator">
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                  </div>
-                </div>
+            </div>
+          ))}
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* 입력 영역 */}
+        <div className="chat-input-container">
+          <input
+            ref={inputRef}
+            type="text"
+            className="chat-input"
+            placeholder="메시지를 입력하세요..."
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={handleKeyPress}
+          />
+          <button 
+            className="send-button"
+            onClick={handleSendMessage}
+            disabled={!inputValue.trim()}
+          >
+            ➤
+          </button>
+        </div>
+      </div>
+
+      {/* 사이드바 */}
+      <div className="sidebar">
+        <div className="sidebar-header">
+          <h2>채팅 설정</h2>
+        </div>
+        
+        <div className="sidebar-content">
+          <div className="info-section">
+            <h3>📊 세션 상태</h3>
+            <div className="session-info">
+              <div className="info-item">
+                <span className="info-label">메시지 수:</span>
+                <span className="info-value">{messages.length}</span>
               </div>
-            )}
-            
-            <div ref={messagesEndRef} />
+              <div className="info-item">
+                <span className="info-label">사용자 메시지:</span>
+                <span className="info-value">
+                  {messages.filter(m => m.role === 'user').length}
+                </span>
+              </div>
+              <div className="info-item">
+                <span className="info-label">AI 응답:</span>
+                <span className="info-value">
+                  {messages.filter(m => m.role === 'assistant').length}
+                </span>
+              </div>
+            </div>
           </div>
 
-          {/* Input Form */}
-          <form className="chat-input-form" onSubmit={handleSubmit}>
-            <div className="input-group">
-              <input
-                type="text"
-                className="chat-input"
-                placeholder="메시지를 입력하세요..."
-                value={userInput}
-                onChange={(e) => setUserInput(e.target.value)}
-                onKeyDown={handleKeyPress}
-                disabled={processing}
-              />
-              <button 
-                type="submit" 
-                className="btn-primary"
-                disabled={!userInput.trim() || processing}
-              >
-                {processing ? '전송 중...' : '전송'}
-              </button>
-            </div>
-          </form>
-        </main>
+          <div className="divider"></div>
+
+          <div className="info-section">
+            <h3>ℹ️ 정보</h3>
+            <p className="info-text">
+              이것은 Streamlit 스타일의 채팅 인터페이스입니다. 
+              메시지를 입력하고 Enter를 누르거나 전송 버튼을 클릭하세요.
+            </p>
+          </div>
+
+          <div className="divider"></div>
+
+          <div className="info-section">
+            <button 
+              className="clear-button"
+              onClick={() => setMessages([
+                { role: 'assistant', content: '안녕하세요! 무엇을 도와드릴까요?' }
+              ])}
+            >
+              🔄 대화 초기화
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
