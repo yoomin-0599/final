@@ -25,7 +25,7 @@ except ImportError:
 
 # Import enhanced modules
 try:
-    from database import db, init_db
+    from database import db, init_db, get_db_connection
     from enhanced_news_collector import collector, collect_news_async
     ENHANCED_MODULES_AVAILABLE = True
     logger.info("✅ Enhanced modules loaded successfully")

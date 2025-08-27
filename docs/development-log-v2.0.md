@@ -416,11 +416,76 @@ SQLITE_PATH=/tmp/news.db                       # 로컬 DB 경로
 
 ---
 
+## 🔧 최종 배포 이슈 해결
+
+### 개발 환경 프록시 설정 오류 (2025.08.27 최종)
+
+#### **문제상황**
+- React 개발 서버에서 뉴스 수집 시 "뉴스 수집 중 오류가 발생했습니다" 에러 발생
+- API 호출이 로컬 백엔드(localhost:8000) 대신 프로덕션 서버로 전송됨
+
+#### **원인 분석**
+- `vite.config.ts`의 proxy 설정이 프로덕션 타겟으로 고정
+- 개발 환경에서도 `https://streamlit-04.onrender.com`로 API 호출 시도
+- 로컬 FastAPI 서버(localhost:8000)와 연결 실패
+
+#### **해결방법**
+```typescript
+// Before (문제 상황)
+proxy: {
+  '/api': {
+    target: 'https://streamlit-04.onrender.com',  // 프로덕션 URL
+    changeOrigin: true,
+    secure: false,
+  }
+}
+
+// After (해결 후)
+proxy: {
+  '/api': {
+    target: 'http://localhost:8000',  // 로컬 백엔드 URL
+    changeOrigin: true,
+    secure: false,
+  }
+}
+```
+
+#### **검증 결과**
+- ✅ Vite 서버 자동 재시작 확인
+- ✅ React → FastAPI 로컬 연결 정상화
+- ✅ 뉴스 수집 기능 복구 완료
+
+#### **운영 고려사항**
+- 개발환경: `http://localhost:8000` (로컬 FastAPI)
+- 프로덕션환경: `https://streamlit-04.onrender.com` (배포된 서버)
+- 환경별 자동 감지 로직 필요성 확인
+
+### Git 커밋 히스토리 업데이트
+
+**최신 커밋** (`8e9a9ef`):
+```
+fix: 개발 환경용 Vite 프록시 설정 수정
+- React 개발 서버의 API 프록시 타겟을 프로덕션 서버에서 로컬 백엔드로 변경
+- target: https://streamlit-04.onrender.com → http://localhost:8000  
+- 뉴스 수집 오류 해결: 개발 환경에서 로컬 FastAPI 서버와 통신하도록 수정
+- 프로덕션 배포 시에는 별도 설정으로 관리 필요
+```
+
+### 전체 커밋 시리즈 완성 (5개 카테고리)
+
+1. **Database Enhancement** - PostgreSQL 연동 및 고도화
+2. **News Collection System** - 고급 뉴스 수집 시스템 구축  
+3. **Backend API & Dependencies** - FastAPI 백엔드 완성
+4. **Frontend Integration** - React 프론트엔드 통합
+5. **Environment Configuration** - 개발/프로덕션 환경 설정 최종 수정
+
+---
+
 **🤝 Generated with [Claude Code](https://claude.ai/code)**
 
 **Co-Authored-By: Claude <noreply@anthropic.com>**
 
 ---
 *개발 완료일: 2025.08.27*  
-*문서 버전: v2.0*  
+*문서 버전: v2.1 (Final)*  
 *프로젝트 상태: ✅ Production Ready*

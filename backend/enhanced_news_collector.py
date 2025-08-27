@@ -604,7 +604,10 @@ class EnhancedNewsCollector:
         # Save to database
         if unique_articles:
             save_stats = self.save_articles(unique_articles)
-            self.stats.update(save_stats)
+            # Update stats with proper keys
+            self.stats['total_inserted'] = save_stats.get('inserted', 0)
+            self.stats['total_updated'] = save_stats.get('updated', 0)
+            self.stats['total_skipped'] = save_stats.get('skipped', 0)
             self.stats['total_processed'] = len(unique_articles)
         
         end_time = time.time()
