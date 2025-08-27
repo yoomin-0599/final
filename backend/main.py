@@ -14,7 +14,8 @@ import pandas as pd
 from dotenv import load_dotenv
 import asyncio
 
-from news_collector import collect_all_news, init_db
+from news_collector import collect_all_news
+from database import db, get_db_connection, init_db
 
 load_dotenv()
 
@@ -30,9 +31,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# DB 경로 통일 - backend 폴더 내에 위치
-DB_PATH = os.getenv("DB_PATH", "backend/news.db")
 
 # DB 초기화
 init_db()
@@ -76,10 +74,7 @@ class NewsCollectionRequest(BaseModel):
     days: int = 30
     max_pages: int = 5
 
-def get_db_connection():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+# get_db_connection is now imported from database module
 
 @app.get("/api/articles")
 async def get_articles(

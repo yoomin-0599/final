@@ -68,7 +68,6 @@ STRICT_TECH_KEYWORDS   = getenv_bool("STRICT_TECH_KEYWORDS", True)
 SKIP_NON_TECH          = getenv_bool("SKIP_NON_TECH", False)
 
 OPENAI_API_KEY         = getenv_str("OPENAI_API_KEY", "")
-DB_PATH                = getenv_str("DB_PATH", "backend/news.db")
 
 # RSS 피드 소스
 FEEDS: List[Dict[str, str]] = [
@@ -145,32 +144,45 @@ ict 클라우드 엣지컴퓨팅 엣지 컴퓨팅 서버 데이터센터 쿠버�
 바이오 바이오센서 유전자치료제 세포치료제 의료기기 헬스케어 디지털 헬스 웨어러블 원격진료
 """.split()))
 
-# DB 초기화
-def init_db():
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-    cursor = conn.cursor()
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS articles (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT,
-        link TEXT UNIQUE,
-        published TEXT,
-        source TEXT,
-        raw_text TEXT,
-        summary TEXT,
-        keywords TEXT,
-        category TEXT,
-        created_at TEXT DEFAULT (datetime('now'))
-    );
-    """)
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS favorites (
-        article_id INTEGER UNIQUE,
-        created_at TEXT DEFAULT (datetime('now'))
-    );
-    """)
-    conn.commit()
-    conn.close()
+# Import database module
+try:
+    from database import db, get_db_connection, init_db
+    DB_MODULE_AVAILABLE = True
+except ImportError:
+    DB_MODULE_AVAILABLE = False
+    # Fallback to sqlite for development
+    DB_PATH = getenv_str("DB_PATH", "news.db")
+    
+    def init_db():
+        conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+        cursor = conn.cursor()
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS articles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT,
+            link TEXT UNIQUE,
+            published TEXT,
+            source TEXT,
+            raw_text TEXT,
+            summary TEXT,
+            keywords TEXT,
+            category TEXT,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
+        """)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS favorites (
+            article_id INTEGER UNIQUE,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
+        """)
+        conn.commit()
+        conn.close()
+        
+    def get_db_connection():
+        conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        return conn
 
 def canonicalize_link(url: str) -> str:
     try:
@@ -302,38 +314,61 @@ def is_tech_doc(title: str, body: str, keywords: Iterable[str]) -> bool:
     return False
 
 def link_exists(link: str) -> bool:
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT 1 FROM articles WHERE link=? LIMIT 1", (link,))
-    result = cursor.fetchone() is not None
-    conn.close()
-    return result
+    if DB_MODULE_AVAILABLE:
+        results = db.execute_query("SELECT 1 FROM articles WHERE link=? LIMIT 1", (link,))
+        return len(results) > 0
+    else:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1 FROM articles WHERE link=? LIMIT 1", (link,))
+        result = cursor.fetchone() is not None
+        conn.close()
+        return result
 
 def upsert_article(title, link, published, source, raw_text, summary, keywords):
     link = canonicalize_link(link)
     summary = sanitize_summary(summary)
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    try:
-        cursor.execute("""
-            INSERT INTO articles (title, link, published, source, raw_text, summary, keywords, category)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (title, link, published, source, raw_text, summary,
-              json.dumps(keywords, ensure_ascii=False), None))
-        conn.commit()
-        result = "insert"
-    except sqlite3.IntegrityError:
-        cursor.execute("""
-            UPDATE articles
-               SET title=?, published=?, source=?,
-                   raw_text=?, summary=?, keywords=?
-             WHERE link=?
-        """, (title, published, source, raw_text, summary,
-              json.dumps(keywords, ensure_ascii=False), link))
-        conn.commit()
-        result = "update"
-    conn.close()
-    return result
+    keywords_json = json.dumps(keywords, ensure_ascii=False)
+    
+    if DB_MODULE_AVAILABLE:
+        try:
+            # Try insert first
+            db.execute_update("""
+                INSERT INTO articles (title, link, published, source, raw_text, summary, keywords, category)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (title, link, published, source, raw_text, summary, keywords_json, None))
+            return "insert"
+        except:
+            # If insert fails, try update
+            db.execute_update("""
+                UPDATE articles
+                   SET title=?, published=?, source=?,
+                       raw_text=?, summary=?, keywords=?
+                 WHERE link=?
+            """, (title, published, source, raw_text, summary, keywords_json, link))
+            return "update"
+    else:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                INSERT INTO articles (title, link, published, source, raw_text, summary, keywords, category)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (title, link, published, source, raw_text, summary, keywords_json, None))
+            conn.commit()
+            result = "insert"
+        except sqlite3.IntegrityError:
+            cursor.execute("""
+                UPDATE articles
+                   SET title=?, published=?, source=?,
+                       raw_text=?, summary=?, keywords=?
+                 WHERE link=?
+            """, (title, published, source, raw_text, summary, keywords_json, link))
+            conn.commit()
+            result = "update"
+        finally:
+            conn.close()
+        return result
 
 def _process_entry(entry, idx, total, source):
     title = getattr(entry, "title", "").strip()
