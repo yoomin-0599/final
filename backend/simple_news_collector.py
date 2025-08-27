@@ -11,12 +11,31 @@ import os
 from datetime import datetime
 from typing import List, Dict
 
-# Simple configuration
+# Simple configuration - expanded feed list
 FEEDS = [
+    # Korean Tech News
     {"feed_url": "https://it.donga.com/feeds/rss/", "source": "IT동아"},
     {"feed_url": "https://rss.etnews.com/Section902.xml", "source": "전자신문_속보"},
+    {"feed_url": "https://rss.etnews.com/Section901.xml", "source": "전자신문_오늘의뉴스"},
+    {"feed_url": "https://zdnet.co.kr/news/news_xml.asp", "source": "ZDNet Korea"},
+    {"feed_url": "https://www.itworld.co.kr/rss/all.xml", "source": "ITWorld Korea"},
+    {"feed_url": "https://www.bloter.net/feed", "source": "Bloter"},
+    {"feed_url": "https://byline.network/feed/", "source": "Byline Network"},
+    {"feed_url": "https://platum.kr/feed", "source": "Platum"},
+    {"feed_url": "https://www.boannews.com/media/news_rss.xml", "source": "보안뉴스"},
+    {"feed_url": "https://it.chosun.com/rss.xml", "source": "IT조선"},
+    
+    # Global Tech News
     {"feed_url": "https://techcrunch.com/feed/", "source": "TechCrunch"},
     {"feed_url": "https://www.theverge.com/rss/index.xml", "source": "The Verge"},
+    {"feed_url": "https://www.engadget.com/rss.xml", "source": "Engadget"},
+    {"feed_url": "https://www.wired.com/feed/rss", "source": "WIRED"},
+    {"feed_url": "https://www.technologyreview.com/feed/", "source": "MIT Tech Review"},
+    {"feed_url": "https://arstechnica.com/feed/", "source": "Ars Technica"},
+    {"feed_url": "https://feeds.feedburner.com/venturebeat/SZYF", "source": "VentureBeat"},
+    {"feed_url": "https://thenextweb.com/feed", "source": "The Next Web"},
+    {"feed_url": "https://www.zdnet.com/news/rss.xml", "source": "ZDNet"},
+    {"feed_url": "https://www.cnet.com/rss/news/", "source": "CNET News"},
 ]
 
 DB_PATH = "simple_news.db"
@@ -119,6 +138,18 @@ def save_articles(articles: List[Dict]) -> Dict[str, int]:
     conn.close()
     
     return stats
+
+def collect_all_feeds():
+    """Collect news from all feeds and save to DB"""
+    all_articles = []
+    for feed in FEEDS:
+        articles = collect_from_feed(feed['feed_url'], feed['source'])
+        all_articles.extend(articles)
+    
+    if all_articles:
+        stats = save_articles(all_articles)
+        return len(all_articles), stats
+    return 0, {'inserted': 0, 'skipped': 0}
 
 def run_simple_collection():
     """Run simple news collection"""
