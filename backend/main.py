@@ -22,6 +22,20 @@ try:
 except ImportError:
     pass
 
+# Import keyword extraction function
+try:
+    from keyword_maker import extract_keywords
+except ImportError:
+    # Fallback to simple keyword extraction if keyword_maker is not available
+    def extract_keywords(text: str):
+        """Simple keyword extraction fallback"""
+        keywords = []
+        tech_terms = ['AI', 'API', 'IoT', 'Cloud', 'Data', 'Security', 'Web', 'Mobile']
+        for term in tech_terms:
+            if term.lower() in text.lower():
+                keywords.append(term)
+        return keywords[:8]
+
 # Simple database path for production
 DB_PATH = os.getenv('SQLITE_PATH', '/tmp/news.db')
 print(f"Using database at: {DB_PATH}")
@@ -66,9 +80,29 @@ def init_db():
             )
         """)
         
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS collections (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE NOT NULL,
+                rules TEXT,
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS collection_articles (
+                collection_id INTEGER,
+                article_id INTEGER,
+                FOREIGN KEY (collection_id) REFERENCES collections(id),
+                FOREIGN KEY (article_id) REFERENCES articles(id),
+                UNIQUE(collection_id, article_id)
+            )
+        """)
+        
         # Create indexes
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_articles_published ON articles(published DESC)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_articles_source ON articles(source)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_collection_articles ON collection_articles(collection_id, article_id)")
         
         conn.commit()
         conn.close()
@@ -527,31 +561,22 @@ async def get_collections():
         ensure_db_initialized()
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM articles")
         
-        # Simple collection without complex dependencies
-        articles_data = []
+        # Get all collections
+        cursor.execute("""
+            SELECT c.id, c.name, c.rules, c.created_at, 
+                   COUNT(ca.article_id) as article_count
+            FROM collections c
+            LEFT JOIN collection_articles ca ON c.id = ca.collection_id
+            GROUP BY c.id
+        """)
+        
+        collections = []
         for row in cursor.fetchall():
-            articles_data.append(dict(row))
-        
-        if not articles_data:
-            return []
-        
-        # Return simple collections without pandas dependency
-        collections = [
-            {
-                "name": "반도체 동향",
-                "count": len([a for a in articles_data if any(keyword in (a.get('keywords', '') or '') for keyword in ['반도체', '메모리', '시스템반도체'])]),
-                "rules": {"include_keywords": ["반도체", "메모리", "시스템반도체"]},
-                "articles": []
-            },
-            {
-                "name": "AI/데이터센터", 
-                "count": len([a for a in articles_data if any(keyword in (a.get('keywords', '') or '') for keyword in ['AI', '인공지능', '데이터센터'])]),
-                "rules": {"include_keywords": ["AI", "인공지능", "데이터센터"]},
-                "articles": []
-            }
-        ]
+            collection = dict(row)
+            collection['rules'] = json.loads(collection['rules']) if collection['rules'] else {}
+            collection['count'] = collection['article_count']
+            collections.append(collection)
         
         conn.close()
         return collections
@@ -566,18 +591,36 @@ async def create_collection(request: CollectionRequest):
         ensure_db_initialized()
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM articles")
         
-        articles_data = [dict(row) for row in cursor.fetchall()]
-        if not articles_data:
-            raise HTTPException(status_code=400, detail="기사 데이터가 없습니다.")
+        # Create the collection
+        cursor.execute("""
+            INSERT INTO collections (name, rules) VALUES (?, ?)
+        """, (request.name, json.dumps(request.rules) if request.rules else None))
         
-        # Simple collection creation without complex dependencies
+        collection_id = cursor.lastrowid
+        
+        # Add articles based on rules
+        if request.rules and 'include_keywords' in request.rules:
+            keywords = request.rules['include_keywords']
+            keyword_filter = ' OR '.join([f"keywords LIKE '%{kw}%'" for kw in keywords])
+            
+            cursor.execute(f"""
+                INSERT INTO collection_articles (collection_id, article_id)
+                SELECT ?, id FROM articles 
+                WHERE {keyword_filter}
+            """, (collection_id,))
+            
+            added_count = cursor.rowcount
+        else:
+            added_count = 0
+        
+        conn.commit()
         conn.close()
-        return {"message": f"컬렉션 '{request.name}' 생성 완료", "added_articles": len(articles_data)}
         
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        return {"message": f"컬렉션 '{request.name}' 생성 완료", "added_articles": added_count, "collection_id": collection_id}
+        
+    except sqlite3.IntegrityError:
+        raise HTTPException(status_code=400, detail=f"컬렉션 '{request.name}'이 이미 존재합니다.")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"컬렉션 생성 실패: {str(e)}")
 
@@ -622,11 +665,48 @@ async def translate_article(article_id: int):
         if not article:
             raise HTTPException(status_code=404, detail="기사를 찾을 수 없습니다.")
         
-        # Simple response without translation service
         article_dict = dict(article)
+        
+        # Simple translation using basic patterns (without external API)
+        # This is a placeholder - in production, use proper translation API
+        translated_title = article_dict['title']
+        translated_summary = article_dict.get('summary', '')
+        
+        # Basic keyword-based translation hints
+        translation_map = {
+            'AI': '인공지능',
+            'Machine Learning': '머신러닝',
+            'Deep Learning': '딥러닝',
+            'Cloud': '클라우드',
+            'Security': '보안',
+            'Data': '데이터',
+            'API': 'API',
+            'Web': '웹',
+            'Mobile': '모바일',
+            'Database': '데이터베이스'
+        }
+        
+        # Check if article appears to be in English
+        is_english = any(word in translated_title.lower() for word in ['the', 'and', 'or', 'is', 'to'])
+        
+        if is_english:
+            # Apply basic translations for known terms
+            for eng, kor in translation_map.items():
+                if eng.lower() in translated_title.lower():
+                    translated_title = f"{translated_title} ({kor} 관련)"
+                    break
+            
+            article_dict['translated_title'] = translated_title
+            article_dict['translated_summary'] = f"[자동 번역 미지원] {translated_summary[:100]}..."
+            article_dict['is_translated'] = True
+            message = "기본 번역 제공 (전문 번역 서비스는 API 키 설정 필요)"
+        else:
+            article_dict['is_translated'] = False
+            message = "한국어 기사입니다"
+        
         conn.close()
         
-        return {"message": "번역 기능은 현재 사용할 수 없습니다", "article": article_dict}
+        return {"message": message, "article": article_dict}
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"번역 실패: {str(e)}")

@@ -83,6 +83,8 @@ function TabPanel(props: TabPanelProps) {
 interface ArticleCardProps {
   article: Article;
   onToggleFavorite: (id: number) => void;
+  onExtractKeywords?: (id: number) => void;
+  onTranslate?: (id: number) => void;
 }
 
 // 키워드 네트워크 컨테이너 컴포넌트
@@ -116,7 +118,7 @@ function KeywordNetworkContainer() {
   return <KeywordNetwork data={networkData} />;
 }
 
-function ArticleCard({ article, onToggleFavorite }: ArticleCardProps) {
+function ArticleCard({ article, onToggleFavorite, onExtractKeywords, onTranslate }: ArticleCardProps) {
   const readingTime = calculateReadingTime((article.title || '') + (article.summary || ''));
   
   return (
@@ -256,6 +258,26 @@ function ArticleCard({ article, onToggleFavorite }: ArticleCardProps) {
                   {article.is_favorite ? <Favorite /> : <FavoriteBorder />}
                 </IconButton>
               </Tooltip>
+              {onExtractKeywords && (
+                <Tooltip title="키워드 추출">
+                  <IconButton 
+                    onClick={() => onExtractKeywords(article.id)}
+                    size="small"
+                  >
+                    <TrendingUp fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              )}
+              {onTranslate && (
+                <Tooltip title="번역">
+                  <IconButton 
+                    onClick={() => onTranslate(article.id)}
+                    size="small"
+                  >
+                    🌐
+                  </IconButton>
+                </Tooltip>
+              )}
               <Typography variant="caption" color="text.secondary">
                 #{article.id}
               </Typography>
@@ -294,6 +316,7 @@ export default function App() {
   const [keywordStats, setKeywordStats] = useState<KeywordStats[]>([]);
   const [loading, setLoading] = useState(false);
   const [collecting, setCollecting] = useState(false);
+  const [collections, setCollections] = useState<any[]>([]);
   
   // 필터 상태
   const [searchTerm, setSearchTerm] = useState('');
@@ -343,6 +366,8 @@ export default function App() {
         setArticles(articlesData);
         const keywordStatsData = await newsApi.getKeywordStats();
         setKeywordStats(keywordStatsData);
+        const collectionsData = await newsApi.getCollections();
+        setCollections(collectionsData);
       } catch (error) {
         console.error('Failed to load initial data:', error);
       } finally {
@@ -434,6 +459,59 @@ export default function App() {
       ));
     } catch (error) {
       console.error('Failed to toggle favorite:', error);
+    }
+  };
+
+  // 컬렉션 생성
+  const handleCreateCollection = async () => {
+    const name = prompt('새 컬렉션 이름을 입력하세요:');
+    if (!name) return;
+    
+    const keywords = prompt('관련 키워드를 쉼표로 구분하여 입력하세요 (예: AI, 클라우드, 보안):');
+    const rules = keywords ? { include_keywords: keywords.split(',').map(k => k.trim()) } : {};
+    
+    try {
+      await newsApi.createCollection(name, rules);
+      const updatedCollections = await newsApi.getCollections();
+      setCollections(updatedCollections);
+      alert(`컬렉션 '${name}'이 생성되었습니다!`);
+    } catch (error) {
+      console.error('Failed to create collection:', error);
+      alert('컬렉션 생성에 실패했습니다.');
+    }
+  };
+
+  // 키워드 추출
+  const handleExtractKeywords = async (articleId: number) => {
+    try {
+      const result = await newsApi.extractKeywords(articleId);
+      // Update the article with new keywords
+      setArticles(prev => prev.map(a => 
+        a.id === articleId ? { ...a, keywords: result.keywords } : a
+      ));
+      alert('키워드 추출이 완료되었습니다!');
+    } catch (error) {
+      console.error('Failed to extract keywords:', error);
+    }
+  };
+
+  // 번역
+  const handleTranslate = async (articleId: number) => {
+    try {
+      const result = await newsApi.translateArticle(articleId);
+      alert(result.message);
+      if (result.article.is_translated) {
+        // Update article with translation
+        setArticles(prev => prev.map(a => 
+          a.id === articleId ? { 
+            ...a, 
+            title: result.article.translated_title || a.title,
+            summary: result.article.translated_summary || a.summary 
+          } : a
+        ));
+      }
+    } catch (error) {
+      console.error('Failed to translate article:', error);
     }
   };
 
@@ -639,11 +717,22 @@ export default function App() {
             {collecting ? '수집 중...' : '🔄 뉴스 수집'}
           </Button>
 
+          {/* 컬렉션 관리 버튼 추가 */}
+          <Button
+            variant="outlined"
+            fullWidth
+            onClick={() => handleCreateCollection()}
+            sx={{ mb: 2 }}
+          >
+            📁 새 컬렉션 만들기
+          </Button>
+
           {/* 통계 */}
           <Paper sx={{ 
             p: 2, 
             bgcolor: theme => theme.palette.mode === 'dark' ? 'grey.800' : 'grey.50',
-            border: theme => theme.palette.mode === 'dark' ? '1px solid rgba(255, 255, 255, 0.12)' : 'none'
+            border: theme => theme.palette.mode === 'dark' ? '1px solid rgba(255, 255, 255, 0.12)' : 'none',
+            mb: 2
           }}>
             <Typography variant="body2" sx={{ 
               color: theme => theme.palette.mode === 'dark' ? 'grey.300' : 'text.primary'
@@ -654,6 +743,24 @@ export default function App() {
               📅 최근 7일: {stats.recentArticles}건
             </Typography>
           </Paper>
+
+          {/* 컬렉션 목록 */}
+          {collections.length > 0 && (
+            <>
+              <Divider sx={{ my: 2 }} />
+              <Typography variant="h6" gutterBottom>📁 컬렉션</Typography>
+              <Stack spacing={1}>
+                {collections.map((collection, index) => (
+                  <Chip
+                    key={index}
+                    label={`${collection.name} (${collection.count})`}
+                    variant="outlined"
+                    size="small"
+                  />
+                ))}
+              </Stack>
+            </>
+          )}
         </Box>
       </Drawer>
 
@@ -719,6 +826,8 @@ export default function App() {
                   key={article.id}
                   article={article}
                   onToggleFavorite={handleToggleFavorite}
+                  onExtractKeywords={handleExtractKeywords}
+                  onTranslate={handleTranslate}
                 />
               ))}
               
@@ -810,6 +919,8 @@ export default function App() {
                     key={article.id}
                     article={article}
                     onToggleFavorite={handleToggleFavorite}
+                    onExtractKeywords={handleExtractKeywords}
+                    onTranslate={handleTranslate}
                   />
                 ))}
               </>
