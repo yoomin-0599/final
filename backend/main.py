@@ -14,33 +14,68 @@ import pandas as pd
 from dotenv import load_dotenv
 import asyncio
 
-from news_collector import collect_all_news
-
-# Safe import of database module
+# Import news collection functionality
 try:
-    from database import db, get_db_connection, init_db
-    DATABASE_MODULE_AVAILABLE = True
+    from integrated_collector import NewsCollector
+    COLLECTOR_AVAILABLE = True
+    collector = NewsCollector()
 except (ImportError, ModuleNotFoundError) as e:
-    print(f"Database module not available, using fallback: {e}")
-    DATABASE_MODULE_AVAILABLE = False
-    
-    # Fallback database functions
-    import sqlite3
-    DB_PATH = os.getenv("SQLITE_PATH", "/opt/render/project/src/news.db")
-    
-    def get_db_connection():
+    print(f"Integrated collector not available: {e}")
+    COLLECTOR_AVAILABLE = False
+    collector = None
+
+# Simple database connection for production
+import sqlite3
+
+def get_production_db_path():
+    """Get correct database path for environment"""
+    if os.getenv('DATABASE_URL'):
+        return os.getenv('SQLITE_PATH', '/tmp/news.db')
+    else:
+        # Check multiple possible locations
+        paths = [
+            'backend/news.db',
+            '../backend/news.db', 
+            'news.db',
+            '/tmp/news.db'
+        ]
+        for path in paths:
+            try:
+                # Try to create/connect to test if writable
+                conn = sqlite3.connect(path, check_same_thread=False)
+                conn.close()
+                return path
+            except:
+                continue
+        return '/tmp/news.db'  # Final fallback
+
+DB_PATH = get_production_db_path()
+print(f"Using database at: {DB_PATH}")
+
+def get_db_connection():
+    """Get database connection with proper error handling"""
+    try:
         conn = sqlite3.connect(DB_PATH, check_same_thread=False)
         conn.row_factory = sqlite3.Row
         return conn
-    
-    def init_db():
+    except Exception as e:
+        print(f"Database connection error: {e}")
+        # Create directory if needed
+        os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+        conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+def init_db():
+    """Initialize database with proper structure"""
+    try:
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS articles (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                title TEXT,
-                link TEXT UNIQUE,
+                title TEXT NOT NULL,
+                link TEXT UNIQUE NOT NULL,
                 published TEXT,
                 source TEXT,
                 raw_text TEXT,
@@ -48,16 +83,26 @@ except (ImportError, ModuleNotFoundError) as e:
                 keywords TEXT,
                 category TEXT,
                 created_at TEXT DEFAULT (datetime('now'))
-            );
+            )
         """)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS favorites (
                 article_id INTEGER UNIQUE,
                 created_at TEXT DEFAULT (datetime('now'))
-            );
+            )
         """)
+        
+        # Create indexes
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_articles_published ON articles(published DESC)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_articles_source ON articles(source)")
+        
         conn.commit()
         conn.close()
+        print("✅ Database initialized successfully")
+        return True
+    except Exception as e:
+        print(f"❌ Database initialization failed: {e}")
+        return False
 
 load_dotenv()
 
@@ -332,19 +377,57 @@ async def get_stats():
 
 # 뉴스 수집 API
 @app.post("/api/collect-news")
-async def collect_news(background_tasks: BackgroundTasks, request: NewsCollectionRequest):
+async def collect_news(background_tasks: BackgroundTasks):
     """RSS 피드에서 뉴스를 수집합니다."""
-    background_tasks.add_task(run_news_collection, request.days, request.max_pages)
-    return {"message": "뉴스 수집을 시작했습니다.", "status": "started"}
+    if COLLECTOR_AVAILABLE and collector:
+        background_tasks.add_task(run_news_collection)
+        return {"message": "뉴스 수집을 시작했습니다.", "status": "started"}
+    else:
+        return {"message": "뉴스 수집 모듈을 사용할 수 없습니다.", "status": "error"}
 
-async def run_news_collection(days: int, max_pages: int):
+async def run_news_collection():
     """백그라운드에서 뉴스 수집을 실행합니다."""
     try:
-        # news_collector 모듈 사용
-        collect_all_news()
-        print(f"뉴스 수집 완료")
+        if collector:
+            success = collector.run_collection()
+            if success:
+                print("✅ 뉴스 수집 완료")
+            else:
+                print("❌ 뉴스 수집 실패")
+        else:
+            print("❌ 뉴스 수집 모듈이 없습니다")
     except Exception as e:
-        print(f"뉴스 수집 실패: {e}")
+        print(f"❌ 뉴스 수집 오류: {e}")
+
+# 수동 뉴스 수집 엔드포인트 (즉시 실행)
+@app.post("/api/collect-news-now")
+async def collect_news_now():
+    """즉시 뉴스를 수집합니다."""
+    try:
+        if COLLECTOR_AVAILABLE and collector:
+            success = collector.run_collection()
+            if success:
+                # 수집 결과 통계
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                cursor.execute("SELECT COUNT(*) FROM articles")
+                total = cursor.fetchone()[0]
+                cursor.execute("SELECT source, COUNT(*) FROM articles GROUP BY source")
+                by_source = dict(cursor.fetchall())
+                conn.close()
+                
+                return {
+                    "message": "뉴스 수집이 완료되었습니다.",
+                    "status": "success",
+                    "total_articles": total,
+                    "by_source": by_source
+                }
+            else:
+                return {"message": "뉴스 수집에 실패했습니다.", "status": "error"}
+        else:
+            return {"message": "뉴스 수집 모듈을 사용할 수 없습니다.", "status": "error"}
+    except Exception as e:
+        return {"message": f"뉴스 수집 오류: {str(e)}", "status": "error"}
 
 # 정적 파일 서빙 설정 (React 빌드 파일)
 frontend_dist = Path(__file__).parent.parent / "frontend" / "news-app" / "dist"
