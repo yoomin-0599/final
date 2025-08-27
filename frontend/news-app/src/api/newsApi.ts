@@ -119,11 +119,34 @@ export const newsApi = {
     return response.data;
   },
 
-  // Immediate news collection with full response
+  // Immediate news collection with full response and error handling
   collectNewsNow: async (maxFeeds?: number) => {
-    const params = maxFeeds ? { max_feeds: maxFeeds } : {};
-    const response = await api.post('/api/collect-news-now', null, { params });
-    return response.data;
+    try {
+      const params = maxFeeds ? { max_feeds: maxFeeds } : {};
+      console.log('📡 API call: /api/collect-news-now with params:', params);
+      
+      const response = await api.post('/api/collect-news-now', null, { 
+        params,
+        timeout: 60000 // 60 second timeout for collection
+      });
+      
+      console.log('📡 API response:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('API Error in collectNewsNow:', error);
+      
+      if (error.response) {
+        // Server responded with error status
+        const errorData = error.response.data;
+        throw new Error(`Server Error (${error.response.status}): ${errorData.detail || errorData.message || 'Unknown error'}`);
+      } else if (error.request) {
+        // Network error
+        throw new Error('Network Error: Unable to reach the server. Please check your connection.');
+      } else {
+        // Other errors
+        throw new Error(`Request Error: ${error.message}`);
+      }
+    }
   },
 
   // Get collection status

@@ -424,9 +424,10 @@ export default function App() {
     setCurrentPage(1);
   }, [articles, searchTerm, selectedSource, dateFrom, dateTo, favoritesOnly]);
 
-  // Enhanced news collection
+  // Enhanced news collection with improved error handling
   const collectNews = async () => {
     setCollecting(true);
+    
     try {
       console.log('🚀 Starting news collection...');
       
@@ -435,37 +436,81 @@ export default function App() {
       
       console.log('✅ Collection completed:', collectionResult);
       
-      if (collectionResult.status === 'success') {
+      if (collectionResult && collectionResult.status === 'success') {
         // Show success message with details
-        const message = collectionResult.message || 
-          `수집 완료: ${collectionResult.inserted || 0}개 신규, ${collectionResult.updated || 0}개 업데이트`;
+        const inserted = collectionResult.inserted || 0;
+        const updated = collectionResult.updated || 0;
+        const total = collectionResult.total_articles || 0;
+        const duration = collectionResult.duration ? ` (${Math.round(collectionResult.duration)}초)` : '';
         
-        // Create a temporary alert for now (can be replaced with better UI later)
+        const message = `✅ 뉴스 수집 완료${duration}\n` +
+          `• 신규: ${inserted}개\n` + 
+          `• 업데이트: ${updated}개\n` +
+          `• 전체 기사: ${total}개`;
+        
         alert(message);
         
-        // Reload data
-        const articlesData = await newsApi.getArticles({ limit: 100 });
-        setArticles(articlesData);
-        const keywordStatsData = await newsApi.getKeywordStats();
-        setKeywordStats(keywordStatsData);
+        // Reload data with error handling for each request
+        try {
+          console.log('📰 Reloading articles...');
+          const articlesData = await newsApi.getArticles({ limit: 100 });
+          setArticles(articlesData);
+          console.log(`✅ Loaded ${articlesData.length} articles`);
+        } catch (articlesError) {
+          console.error('Failed to reload articles:', articlesError);
+        }
+        
+        try {
+          console.log('🔍 Reloading keyword stats...');
+          const keywordStatsData = await newsApi.getKeywordStats();
+          setKeywordStats(keywordStatsData);
+          console.log(`✅ Loaded ${keywordStatsData.length} keywords`);
+        } catch (keywordsError) {
+          console.error('Failed to reload keywords:', keywordsError);
+        }
         
         // Update collections if they exist
         try {
+          console.log('📁 Reloading collections...');
           const collectionsData = await newsApi.getCollections();
           setCollections(collectionsData);
+          console.log(`✅ Loaded ${collectionsData.length} collections`);
         } catch (collectionsError) {
-          console.warn('Failed to update collections:', collectionsError);
+          console.warn('Collections not available:', collectionsError);
+          // This is not critical, so don't show error to user
         }
-      } else {
+        
+      } else if (collectionResult) {
         console.error('Collection failed:', collectionResult);
-        alert(collectionResult.message || '뉴스 수집에 실패했습니다.');
+        const errorMsg = collectionResult.message || 
+          `뉴스 수집이 실패했습니다. 상태: ${collectionResult.status || 'unknown'}`;
+        alert(`❌ ${errorMsg}`);
+      } else {
+        throw new Error('No response from collection API');
       }
       
     } catch (error) {
       console.error('Failed to collect news:', error);
-      alert('뉴스 수집 중 오류가 발생했습니다. 다시 시도해주세요.');
+      
+      // More specific error messages
+      let errorMessage = '뉴스 수집 중 오류가 발생했습니다.';
+      
+      if (error instanceof Error) {
+        if (error.message.includes('fetch')) {
+          errorMessage += '\n네트워크 연결을 확인해주세요.';
+        } else if (error.message.includes('timeout')) {
+          errorMessage += '\n요청 시간이 초과되었습니다.';
+        } else {
+          errorMessage += `\n오류 내용: ${error.message}`;
+        }
+      }
+      
+      errorMessage += '\n\n다시 시도해주세요.';
+      alert(`❌ ${errorMessage}`);
+      
     } finally {
       setCollecting(false);
+      console.log('📝 Collection process finished');
     }
   };
 

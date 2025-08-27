@@ -573,11 +573,18 @@ async def collect_news_now(
             
             # Get updated statistics
             try:
-                stats_query = "SELECT COUNT(*) FROM articles"
-                total_articles = db.execute_query(stats_query)[0]['count']
+                if db.db_type == "postgresql":
+                    stats_query = "SELECT COUNT(*) as count FROM articles"
+                    sources_query = "SELECT source, COUNT(*) as count FROM articles GROUP BY source ORDER BY count DESC"
+                else:
+                    stats_query = "SELECT COUNT(*) as count FROM articles"
+                    sources_query = "SELECT source, COUNT(*) as count FROM articles GROUP BY source ORDER BY count DESC"
                 
-                sources_query = "SELECT source, COUNT(*) as count FROM articles GROUP BY source ORDER BY count DESC"
-                by_source = {row['source']: row['count'] for row in db.execute_query(sources_query)}
+                stats_result = db.execute_query(stats_query)
+                total_articles = stats_result[0]['count'] if stats_result else 0
+                
+                sources_result = db.execute_query(sources_query)
+                by_source = {row['source']: row['count'] for row in sources_result}
                 
                 return {
                     "message": f"뉴스 수집 완료: {result['stats']['total_inserted']}개 신규, {result['stats']['total_updated']}개 업데이트",
