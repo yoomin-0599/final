@@ -1,165 +1,115 @@
-from fastapi import FastAPI, HTTPException, Query, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Query, BackgroundTasks, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
-from typing import List, Dict, Optional, Set
-import sqlite3
+from typing import List, Dict, Optional, Set, Any
 import json
 import os
 import sys
+import logging
 from pathlib import Path
 from datetime import datetime, timedelta
 import asyncio
-import requests
-import feedparser
-import re
 
-# Load environment variables if available
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Load environment variables
 try:
     from dotenv import load_dotenv
     load_dotenv()
 except ImportError:
     pass
 
-# Import keyword extraction function
+# Import enhanced modules
 try:
-    from keyword_maker import extract_keywords
-except ImportError:
-    # Fallback to simple keyword extraction if keyword_maker is not available
-    def extract_keywords(text: str):
-        """Simple keyword extraction fallback"""
-        keywords = []
-        tech_terms = ['AI', 'API', 'IoT', 'Cloud', 'Data', 'Security', 'Web', 'Mobile']
-        for term in tech_terms:
-            if term.lower() in text.lower():
-                keywords.append(term)
-        return keywords[:8]
+    from database import db, init_db
+    from enhanced_news_collector import collector, collect_news_async
+    ENHANCED_MODULES_AVAILABLE = True
+    logger.info("✅ Enhanced modules loaded successfully")
+except ImportError as e:
+    logger.error(f"❌ Failed to load enhanced modules: {e}")
+    ENHANCED_MODULES_AVAILABLE = False
 
-# Import news collector functions - try simple version first (no pandas dependency)
-try:
-    from simple_news_collector import (
-        init_simple_db, 
-        collect_from_feed, 
-        save_articles, 
-        collect_all_feeds,
-        FEEDS as SIMPLE_FEEDS
-    )
-    USE_SIMPLE_COLLECTOR = True
-    print("Using simple news collector")
-except ImportError:
-    print("Warning: simple_news_collector not fully available")
-    USE_SIMPLE_COLLECTOR = False
-    # Try full news_collector as fallback
+# Fallback imports
+if not ENHANCED_MODULES_AVAILABLE:
+    logger.info("🔄 Using fallback modules")
     try:
-        from news_collector import init_db as collector_init_db, collect_all_news, FEEDS
-        USE_NEWS_COLLECTOR = True
-        print("Using full news_collector (with pandas)")
+        from simple_news_collector import collect_all_feeds, FEEDS
+        SIMPLE_COLLECTOR_AVAILABLE = True
     except ImportError:
-        print("Warning: news_collector module not available, using basic RSS collection")
-        USE_NEWS_COLLECTOR = False
+        SIMPLE_COLLECTOR_AVAILABLE = False
+        logger.error("❌ No news collector available")
 
-# Simple database path for production
-DB_PATH = os.getenv('SQLITE_PATH', '/tmp/news.db')
-print(f"Using database at: {DB_PATH}")
-
-def get_db_connection():
-    """Get database connection with proper error handling"""
-    try:
-        conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-        conn.row_factory = sqlite3.Row
-        return conn
-    except Exception as e:
-        print(f"Database connection error: {e}")
-        # Create directory if needed
-        os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-        conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-        conn.row_factory = sqlite3.Row
-        return conn
-
-def init_db():
-    """Initialize database with proper structure"""
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS articles (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                title TEXT NOT NULL,
-                link TEXT UNIQUE NOT NULL,
-                published TEXT,
-                source TEXT,
-                raw_text TEXT,
-                summary TEXT,
-                keywords TEXT,
-                category TEXT,
-                created_at TEXT DEFAULT (datetime('now'))
-            )
-        """)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS favorites (
-                article_id INTEGER UNIQUE,
-                created_at TEXT DEFAULT (datetime('now'))
-            )
-        """)
-        
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS collections (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT UNIQUE NOT NULL,
-                rules TEXT,
-                created_at TEXT DEFAULT (datetime('now'))
-            )
-        """)
-        
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS collection_articles (
-                collection_id INTEGER,
-                article_id INTEGER,
-                FOREIGN KEY (collection_id) REFERENCES collections(id),
-                FOREIGN KEY (article_id) REFERENCES articles(id),
-                UNIQUE(collection_id, article_id)
-            )
-        """)
-        
-        # Create indexes
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_articles_published ON articles(published DESC)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_articles_source ON articles(source)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_collection_articles ON collection_articles(collection_id, article_id)")
-        
-        conn.commit()
-        conn.close()
-        print("✅ Database initialized successfully")
-        return True
-    except Exception as e:
-        print(f"❌ Database initialization failed: {e}")
-        return False
-
-app = FastAPI()
-
-# OpenAI API Key from environment variable
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+app = FastAPI(
+    title="News IT's Issue API",
+    description="Enhanced IT/Tech News Collection and Analysis Platform",
+    version="2.0.0"
 )
 
-# DB 초기화는 첫 번째 요청 시에만 수행
+# Environment variables
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+DATABASE_URL = os.getenv("DATABASE_URL", "")
+ENABLE_CORS = os.getenv("ENABLE_CORS", "true").lower() == "true"
+
+# CORS configuration
+if ENABLE_CORS:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+# Database initialization
 _db_initialized = False
 
-def ensure_db_initialized():
+async def ensure_db_initialized():
+    """Ensure database is initialized"""
     global _db_initialized
     if not _db_initialized:
         try:
-            init_db()
+            if ENHANCED_MODULES_AVAILABLE:
+                db.init_database()
+            else:
+                # Fallback initialization
+                import sqlite3
+                conn = sqlite3.connect("/tmp/news.db")
+                cursor = conn.cursor()
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS articles (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        title TEXT NOT NULL,
+                        link TEXT UNIQUE NOT NULL,
+                        published TEXT,
+                        source TEXT,
+                        summary TEXT,
+                        keywords TEXT,
+                        created_at TEXT DEFAULT (datetime('now'))
+                    )
+                """)
+                conn.commit()
+                conn.close()
             _db_initialized = True
+            logger.info("✅ Database initialized successfully")
         except Exception as e:
-            print(f"Database initialization failed: {e}")
-            # Continue without initialization
+            logger.error(f"❌ Database initialization failed: {e}")
+            raise HTTPException(status_code=500, detail="Database initialization failed")
+
+@app.on_event("startup")
+async def startup_event():
+    """Application startup event"""
+    logger.info("🚀 Starting News IT's Issue API Server")
+    await ensure_db_initialized()
+    
+    # Log configuration
+    logger.info(f"Database type: {db.db_type if ENHANCED_MODULES_AVAILABLE else 'SQLite'}")
+    logger.info(f"Enhanced modules: {'Available' if ENHANCED_MODULES_AVAILABLE else 'Not Available'}")
+    logger.info(f"OpenAI API: {'Configured' if OPENAI_API_KEY else 'Not Configured'}")
+    logger.info(f"PostgreSQL: {'Available' if DATABASE_URL else 'Not Available'}")
 
 class Article(BaseModel):
     id: int
@@ -217,51 +167,52 @@ async def get_articles(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None
 ):
-    ensure_db_initialized()
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    """Get articles with filtering and pagination"""
+    await ensure_db_initialized()
     
-    query = "SELECT * FROM articles WHERE 1=1"
-    params = []
-    
-    if source:
-        query += " AND source = ?"
-        params.append(source)
-    
-    if search:
-        query += " AND (title LIKE ? OR summary LIKE ? OR keywords LIKE ?)"
-        search_param = f"%{search}%"
-        params.extend([search_param, search_param, search_param])
-    
-    if favorites_only:
-        query += " AND id IN (SELECT article_id FROM favorites)"
-    
-    if date_from:
-        query += " AND DATE(published) >= ?"
-        params.append(date_from)
-    
-    if date_to:
-        query += " AND DATE(published) <= ?"
-        params.append(date_to)
-    
-    query += " ORDER BY published DESC LIMIT ? OFFSET ?"
-    params.extend([limit, offset])
-    
-    cursor.execute(query, params)
-    articles = []
-    
-    favorite_ids = set()
-    cursor.execute("SELECT article_id FROM favorites")
-    favorite_ids = {row[0] for row in cursor.fetchall()}
-    
-    cursor.execute(query, params)
-    for row in cursor.fetchall():
-        article = dict(row)
-        article['is_favorite'] = article['id'] in favorite_ids
-        articles.append(article)
-    
-    conn.close()
-    return articles
+    try:
+        if ENHANCED_MODULES_AVAILABLE:
+            articles = db.get_articles_with_filters(
+                limit=limit,
+                offset=offset,
+                source=source,
+                search=search,
+                favorites_only=favorites_only,
+                date_from=date_from,
+                date_to=date_to
+            )
+            return articles
+        else:
+            # Fallback implementation
+            import sqlite3
+            conn = sqlite3.connect("/tmp/news.db")
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            query = "SELECT *, 0 as is_favorite FROM articles WHERE 1=1"
+            params = []
+            
+            if source:
+                query += " AND source = ?"
+                params.append(source)
+            
+            if search:
+                query += " AND (title LIKE ? OR summary LIKE ? OR keywords LIKE ?)"
+                search_param = f"%{search}%"
+                params.extend([search_param, search_param, search_param])
+            
+            query += " ORDER BY published DESC LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+            
+            cursor.execute(query, params)
+            articles = [dict(row) for row in cursor.fetchall()]
+            conn.close()
+            
+            return articles
+            
+    except Exception as e:
+        logger.error(f"Error fetching articles: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/sources")
 async def get_sources():
@@ -274,22 +225,44 @@ async def get_sources():
 
 @app.get("/api/keywords/stats")
 async def get_keyword_stats(limit: int = Query(50, le=200)):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT keywords FROM articles WHERE keywords IS NOT NULL")
+    """Get keyword statistics"""
+    await ensure_db_initialized()
     
-    keyword_counter = {}
-    for row in cursor.fetchall():
-        keywords = row[0].split(',') if row[0] else []
-        for kw in keywords:
-            kw = kw.strip()
-            if kw:
-                keyword_counter[kw] = keyword_counter.get(kw, 0) + 1
-    
-    conn.close()
-    
-    sorted_keywords = sorted(keyword_counter.items(), key=lambda x: x[1], reverse=True)[:limit]
-    return [{"keyword": k, "count": v} for k, v in sorted_keywords]
+    try:
+        if ENHANCED_MODULES_AVAILABLE:
+            return db.get_keyword_stats(limit)
+        else:
+            # Fallback implementation
+            import sqlite3
+            conn = sqlite3.connect("/tmp/news.db")
+            cursor = conn.cursor()
+            cursor.execute("SELECT keywords FROM articles WHERE keywords IS NOT NULL")
+            
+            keyword_counter = {}
+            for row in cursor.fetchall():
+                try:
+                    if row[0]:
+                        # Try to parse as JSON, fallback to comma-split
+                        try:
+                            keywords = json.loads(row[0])
+                        except:
+                            keywords = row[0].split(',')
+                        
+                        for kw in keywords:
+                            kw = kw.strip()
+                            if kw:
+                                keyword_counter[kw] = keyword_counter.get(kw, 0) + 1
+                except Exception:
+                    continue
+            
+            conn.close()
+            
+            sorted_keywords = sorted(keyword_counter.items(), key=lambda x: x[1], reverse=True)[:limit]
+            return [{"keyword": k, "count": v} for k, v in sorted_keywords]
+            
+    except Exception as e:
+        logger.error(f"Error getting keyword stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/keywords/network")
 async def get_keyword_network(limit: int = Query(30, le=100)):
@@ -554,55 +527,145 @@ def run_collection():
     
     return False, 0, {}
 
-# 뉴스 수집 API
+# Enhanced news collection API
 @app.post("/api/collect-news")
 async def collect_news(background_tasks: BackgroundTasks):
-    """RSS 피드에서 뉴스를 수집합니다."""
+    """Start news collection in background"""
     try:
+        await ensure_db_initialized()
         background_tasks.add_task(run_background_collection)
-        return {"message": "뉴스 수집을 시작했습니다.", "status": "started"}
+        return {
+            "message": "뉴스 수집을 시작했습니다.", 
+            "status": "started",
+            "timestamp": datetime.now().isoformat()
+        }
     except Exception as e:
+        logger.error(f"Error starting news collection: {e}")
         return {"message": f"오류: {str(e)}", "status": "error"}
 
 async def run_background_collection():
-    """백그라운드 뉴스 수집"""
+    """Background news collection task"""
     try:
-        success, count, stats = run_collection()
-        print(f"뉴스 수집 완료: {count}개 처리, {stats.get('inserted', 0)}개 신규")
-    except Exception as e:
-        print(f"뉴스 수집 오류: {e}")
-
-# 수동 뉴스 수집 엔드포인트 (즉시 실행)
-@app.post("/api/collect-news-now")
-async def collect_news_now():
-    """즉시 뉴스를 수집합니다."""
-    try:
-        success, count, stats = run_collection()
+        logger.info("🚀 Starting background news collection")
         
-        if success:
-            # 현재 통계
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*) FROM articles")
-            total = cursor.fetchone()[0]
-            cursor.execute("SELECT source, COUNT(*) FROM articles GROUP BY source ORDER BY COUNT(*) DESC")
-            by_source = dict(cursor.fetchall())
-            conn.close()
+        if ENHANCED_MODULES_AVAILABLE:
+            result = await collect_news_async(max_feeds=15)  # Limit feeds for background
+            logger.info(f"✅ Background collection completed: {result}")
+        else:
+            # Fallback collection
+            logger.info("Using fallback collector")
+            # Implement basic collection here if needed
+            
+    except Exception as e:
+        logger.error(f"❌ Background collection error: {e}")
+
+@app.post("/api/collect-news-now")
+async def collect_news_now(
+    max_feeds: Optional[int] = Query(None, description="Maximum number of feeds to process")
+):
+    """Immediate news collection with full response"""
+    try:
+        await ensure_db_initialized()
+        
+        if ENHANCED_MODULES_AVAILABLE:
+            logger.info("🚀 Starting enhanced news collection")
+            result = await collect_news_async(max_feeds)
+            
+            # Get updated statistics
+            try:
+                stats_query = "SELECT COUNT(*) FROM articles"
+                total_articles = db.execute_query(stats_query)[0]['count']
+                
+                sources_query = "SELECT source, COUNT(*) as count FROM articles GROUP BY source ORDER BY count DESC"
+                by_source = {row['source']: row['count'] for row in db.execute_query(sources_query)}
+                
+                return {
+                    "message": f"뉴스 수집 완료: {result['stats']['total_inserted']}개 신규, {result['stats']['total_updated']}개 업데이트",
+                    "status": "success",
+                    "duration": result['duration'],
+                    "processed": result['stats']['total_processed'],
+                    "inserted": result['stats']['total_inserted'],
+                    "updated": result['stats']['total_updated'],
+                    "skipped": result['stats']['total_skipped'],
+                    "total_articles": total_articles,
+                    "by_source": by_source,
+                    "successful_feeds": result['successful_feeds'],
+                    "failed_feeds": result['failed_feeds'],
+                    "total_feeds": result['total_feeds'],
+                    "timestamp": datetime.now().isoformat()
+                }
+            except Exception as stats_e:
+                logger.warning(f"Error getting stats: {stats_e}")
+                return {
+                    "message": "뉴스 수집 완료 (통계 오류)",
+                    "status": "success",
+                    "collection_result": result
+                }
+        else:
+            # Fallback simple collection
+            if SIMPLE_COLLECTOR_AVAILABLE:
+                total_count, stats = collect_all_feeds()
+                return {
+                    "message": f"뉴스 수집 완료: {stats.get('inserted', 0)}개 신규 추가",
+                    "status": "success",
+                    "processed": total_count,
+                    "inserted": stats.get('inserted', 0),
+                    "skipped": stats.get('skipped', 0)
+                }
+            else:
+                raise HTTPException(status_code=500, detail="No news collector available")
+            
+    except Exception as e:
+        logger.error(f"❌ News collection error: {e}")
+        raise HTTPException(status_code=500, detail=f"뉴스 수집 오류: {str(e)}")
+
+@app.get("/api/collection-status")
+async def get_collection_status():
+    """Get current collection status and stats"""
+    try:
+        await ensure_db_initialized()
+        
+        if ENHANCED_MODULES_AVAILABLE:
+            # Get database stats
+            total_query = "SELECT COUNT(*) as count FROM articles"
+            total_articles = db.execute_query(total_query)[0]['count']
+            
+            recent_query = """
+                SELECT COUNT(*) as count FROM articles 
+                WHERE created_at > %s
+            """ if db.db_type == "postgresql" else """
+                SELECT COUNT(*) as count FROM articles 
+                WHERE created_at > datetime('now', '-1 day')
+            """
+            
+            if db.db_type == "postgresql":
+                params = (datetime.now() - timedelta(days=1),)
+                recent_articles = db.execute_query(recent_query, params)[0]['count']
+            else:
+                recent_articles = db.execute_query(recent_query)[0]['count']
+            
+            sources_query = "SELECT source, COUNT(*) as count FROM articles GROUP BY source ORDER BY count DESC LIMIT 10"
+            top_sources = db.execute_query(sources_query)
             
             return {
-                "message": f"뉴스 수집 완료: {stats.get('inserted', 0)}개 신규 추가",
-                "status": "success",
-                "processed": count,
-                "inserted": stats.get('inserted', 0),
-                "skipped": stats.get('skipped', 0),
-                "total_articles": total,
-                "by_source": by_source
+                "status": "active",
+                "total_articles": total_articles,
+                "recent_articles_24h": recent_articles,
+                "top_sources": top_sources,
+                "database_type": db.db_type,
+                "enhanced_features": True,
+                "timestamp": datetime.now().isoformat()
             }
         else:
-            return {"message": "뉴스 수집 실패", "status": "error"}
+            return {
+                "status": "basic",
+                "enhanced_features": False,
+                "message": "기본 수집 모드"
+            }
             
     except Exception as e:
-        return {"message": f"오류: {str(e)}", "status": "error"}
+        logger.error(f"Error getting collection status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # 정적 파일 서빙 설정 (React 빌드 파일)
 frontend_dist = Path(__file__).parent.parent / "frontend" / "news-app" / "dist"
