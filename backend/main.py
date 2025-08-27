@@ -15,7 +15,49 @@ from dotenv import load_dotenv
 import asyncio
 
 from news_collector import collect_all_news
-from database import db, get_db_connection, init_db
+
+# Safe import of database module
+try:
+    from database import db, get_db_connection, init_db
+    DATABASE_MODULE_AVAILABLE = True
+except (ImportError, ModuleNotFoundError) as e:
+    print(f"Database module not available, using fallback: {e}")
+    DATABASE_MODULE_AVAILABLE = False
+    
+    # Fallback database functions
+    import sqlite3
+    DB_PATH = os.getenv("SQLITE_PATH", "/opt/render/project/src/news.db")
+    
+    def get_db_connection():
+        conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        return conn
+    
+    def init_db():
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS articles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT,
+                link TEXT UNIQUE,
+                published TEXT,
+                source TEXT,
+                raw_text TEXT,
+                summary TEXT,
+                keywords TEXT,
+                category TEXT,
+                created_at TEXT DEFAULT (datetime('now'))
+            );
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS favorites (
+                article_id INTEGER UNIQUE,
+                created_at TEXT DEFAULT (datetime('now'))
+            );
+        """)
+        conn.commit()
+        conn.close()
 
 load_dotenv()
 
@@ -32,8 +74,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# DB 초기화
-init_db()
+# DB 초기화는 첫 번째 요청 시에만 수행
+_db_initialized = False
+
+def ensure_db_initialized():
+    global _db_initialized
+    if not _db_initialized:
+        try:
+            init_db()
+            _db_initialized = True
+        except Exception as e:
+            print(f"Database initialization failed: {e}")
+            # Continue without initialization
 
 class Article(BaseModel):
     id: int
@@ -86,6 +138,7 @@ async def get_articles(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None
 ):
+    ensure_db_initialized()
     conn = get_db_connection()
     cursor = conn.cursor()
     

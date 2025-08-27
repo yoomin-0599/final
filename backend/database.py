@@ -1,7 +1,13 @@
 import os
 import sqlite3
 from typing import Optional, Any, Dict, List
-from dotenv import load_dotenv
+
+# Load environment variables safely
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 # PostgreSQL imports (optional)
 try:
@@ -9,9 +15,8 @@ try:
     import psycopg2.extras
     POSTGRES_AVAILABLE = True
 except ImportError:
+    psycopg2 = None
     POSTGRES_AVAILABLE = False
-
-load_dotenv()
 
 # Database configuration
 DATABASE_URL = os.getenv("DATABASE_URL")

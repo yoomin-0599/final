@@ -148,7 +148,8 @@ ict 클라우드 엣지컴퓨팅 엣지 컴퓨팅 서버 데이터센터 쿠버�
 try:
     from database import db, get_db_connection, init_db
     DB_MODULE_AVAILABLE = True
-except ImportError:
+except (ImportError, ModuleNotFoundError) as e:
+    print(f"Database module not available: {e}")
     DB_MODULE_AVAILABLE = False
     # Fallback to sqlite for development
     DB_PATH = getenv_str("DB_PATH", "news.db")
