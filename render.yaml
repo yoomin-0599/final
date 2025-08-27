@@ -1,16 +1,13 @@
 services:
   - type: web
     name: streamlit-04
-    runtime: python
-    env: python-3.11
+    env: python
+    runtime: python-3.11
     buildCommand: |
-      # Use Python 3.11 to avoid compatibility issues
-      python --version
-      
       # Backend dependencies
       cd backend
-      python -m pip install --upgrade pip==24.0 setuptools==69.5.1 wheel
-      python -m pip install -r requirements.txt
+      pip install --upgrade pip setuptools wheel
+      pip install -r requirements.txt
       
       # Frontend build
       cd ../frontend/news-app
@@ -19,23 +16,19 @@ services:
       
     startCommand: |
       cd backend
-      # Initialize database and collect initial news
-      python -c "from news_collector import init_db, collect_all_news; init_db(); print('DB initialized')"
-      # Start FastAPI server
       uvicorn main:app --host 0.0.0.0 --port $PORT
       
     envVars:
+      - key: DB_TYPE
+        value: postgres
+      - key: SQLITE_PATH
+        value: /opt/render/project/src/backend/news.db
       - key: PYTHON_VERSION
-        value: "3.11.9"
-      - key: NODE_VERSION
-        value: 18
-      - key: DB_PATH
-        value: backend/news.db
-      - key: ENABLE_SUMMARY
-        value: "0"
-      - key: ENABLE_HTTP_CACHE
-        value: "1"
-      - key: MAX_RESULTS
-        value: "10"
-      - key: PARALLEL_MAX_WORKERS
-        value: "4"
+        value: "3.11.0"
+      - key: OPENAI_API_KEY
+        sync: false
+
+databases:
+  - name: news-postgres
+    databaseName: newsdb
+    user: newsuser
