@@ -424,18 +424,46 @@ export default function App() {
     setCurrentPage(1);
   }, [articles, searchTerm, selectedSource, dateFrom, dateTo, favoritesOnly]);
 
-  // 뉴스 수집
+  // Enhanced news collection
   const collectNews = async () => {
     setCollecting(true);
     try {
-      await newsApi.collectNews();
-      // 수집 후 데이터 다시 로드
-      const articlesData = await newsApi.getArticles({ limit: 100 });
-      setArticles(articlesData);
-      const keywordStatsData = await newsApi.getKeywordStats();
-      setKeywordStats(keywordStatsData);
+      console.log('🚀 Starting news collection...');
+      
+      // Use the immediate collection API for better user feedback
+      const collectionResult = await newsApi.collectNewsNow();
+      
+      console.log('✅ Collection completed:', collectionResult);
+      
+      if (collectionResult.status === 'success') {
+        // Show success message with details
+        const message = collectionResult.message || 
+          `수집 완료: ${collectionResult.inserted || 0}개 신규, ${collectionResult.updated || 0}개 업데이트`;
+        
+        // Create a temporary alert for now (can be replaced with better UI later)
+        alert(message);
+        
+        // Reload data
+        const articlesData = await newsApi.getArticles({ limit: 100 });
+        setArticles(articlesData);
+        const keywordStatsData = await newsApi.getKeywordStats();
+        setKeywordStats(keywordStatsData);
+        
+        // Update collections if they exist
+        try {
+          const collectionsData = await newsApi.getCollections();
+          setCollections(collectionsData);
+        } catch (collectionsError) {
+          console.warn('Failed to update collections:', collectionsError);
+        }
+      } else {
+        console.error('Collection failed:', collectionResult);
+        alert(collectionResult.message || '뉴스 수집에 실패했습니다.');
+      }
+      
     } catch (error) {
       console.error('Failed to collect news:', error);
+      alert('뉴스 수집 중 오류가 발생했습니다. 다시 시도해주세요.');
     } finally {
       setCollecting(false);
     }

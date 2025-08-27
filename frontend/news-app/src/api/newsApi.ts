@@ -110,12 +110,25 @@ export const newsApi = {
     return response.data;
   },
 
-  // 새로운 기능들
+  // Enhanced news collection
   collectNews: async (days: number = 30, maxPages: number = 5) => {
     const response = await api.post('/api/collect-news', {
       days,
       max_pages: maxPages,
     });
+    return response.data;
+  },
+
+  // Immediate news collection with full response
+  collectNewsNow: async (maxFeeds?: number) => {
+    const params = maxFeeds ? { max_feeds: maxFeeds } : {};
+    const response = await api.post('/api/collect-news-now', null, { params });
+    return response.data;
+  },
+
+  // Get collection status
+  getCollectionStatus: async () => {
+    const response = await api.get('/api/collection-status');
     return response.data;
   },
 
