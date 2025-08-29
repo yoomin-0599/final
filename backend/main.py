@@ -597,7 +597,7 @@ async def collect_news_now(
                     "total_articles": total_articles,
                     "by_source": by_source,
                     "successful_feeds": result['successful_feeds'],
-                    "failed_feeds"]: result['failed_feeds'],
+                    "failed_feeds": result['failed_feeds'],
                     "total_feeds": result['total_feeds'],
                     "timestamp": datetime.now().isoformat()
                 }
