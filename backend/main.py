@@ -469,7 +469,7 @@ def run_collection():
         try:
             print("Using simple news collector...")
             # Ensure DB is initialized
-            await ensure_db_initialized() 
+
             
             # Import and use simple collector with current DB
             import simple_news_collector
