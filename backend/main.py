@@ -461,71 +461,71 @@ def save_articles_to_db(articles):
     conn.close()
     return stats
 
-def run_collection():
-    """Run news collection from major sources"""
-    
-    # Try simple collector first (no pandas dependency)
-    if USE_SIMPLE_COLLECTOR:
-        try:
-            print("Using simple news collector...")
-            # Ensure DB is initialized
+# def run_collection():
+#     """Run news collection from major sources"""
+#     
+#     # Try simple collector first (no pandas dependency)
+#     if USE_SIMPLE_COLLECTOR:
+#         try:
+#             print("Using simple news collector...")
+#             # Ensure DB is initialized
 
-            
-            # Import and use simple collector with current DB
-            import simple_news_collector
-            simple_news_collector.DB_PATH = DB_PATH  # Use the same DB path
-            
-            # Collect news from all feeds
-            all_articles = []
-            for feed in SIMPLE_FEEDS[:10]:  # Limit to first 10 feeds for quick collection
-                articles = collect_from_feed(feed['feed_url'], feed['source'], max_items=5)
-                all_articles.extend(articles)
-            
-            if all_articles:
-                # Save to our database
-                stats = save_articles_to_db(all_articles)
-                return True, len(all_articles), stats
-                
-        except Exception as e:
-            print(f"Error using simple collector: {e}")
-    
-    # Try full news_collector as second option
-    if USE_NEWS_COLLECTOR:
-        try:
-            print("Using full news_collector...")
-            collector_init_db()
-            collect_all_news()
-            
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*) FROM articles")
-            total_count = cursor.fetchone()[0]
-            conn.close()
-            
-            return True, total_count, {"message": "Collection completed using news_collector"}
-        except Exception as e:
-            print(f"Error using news_collector: {e}")
-    
-    # Fallback to basic RSS collection
-    print("Using basic RSS collection...")
-    feeds = [
-        {"url": "https://it.donga.com/feeds/rss/", "source": "IT동아"},
-        {"url": "https://rss.etnews.com/Section902.xml", "source": "전자신문"},
-        {"url": "https://techcrunch.com/feed/", "source": "TechCrunch"},
-        {"url": "https://www.theverge.com/rss/index.xml", "source": "The Verge"},
-        {"url": "https://www.engadget.com/rss.xml", "source": "Engadget"},
-    ]
-    
-    all_articles = []
-    for feed in feeds:
-        articles = collect_from_rss(feed["url"], feed["source"])
-        all_articles.extend(articles)
-    
-    if all_articles:
-        stats = save_articles_to_db(all_articles)
-        return True, len(all_articles), stats
-    
-    return False, 0, {}
+#             
+#             # Import and use simple collector with current DB
+#             import simple_news_collector
+#             simple_news_collector.DB_PATH = DB_PATH  # Use the same DB path
+#             
+#             # Collect news from all feeds
+#             all_articles = []
+#             for feed in SIMPLE_FEEDS[:10]:  # Limit to first 10 feeds for quick collection
+#                 articles = collect_from_feed(feed['feed_url'], feed['source'], max_items=5)
+#                 all_articles.extend(articles)
+#             
+#             if all_articles:
+#                 # Save to our database
+#                 stats = save_articles_to_db(all_articles)
+#                 return True, len(all_articles), stats
+#                 
+#         except Exception as e:
+#             print(f"Error using simple collector: {e}")
+#     
+#     # Try full news_collector as second option
+#     if USE_NEWS_COLLECTOR:
+#         try:
+#             print("Using full news_collector...")
+#             collector_init_db()
+#             collect_all_news()
+#             
+#             conn = get_db_connection()
+#             cursor = conn.cursor()
+#             cursor.execute("SELECT COUNT(*) FROM articles")
+#             total_count = cursor.fetchone()[0]
+#             conn.close()
+#             
+#             return True, total_count, {"message": "Collection completed using news_collector"}
+#         except Exception as e:
+#             print(f"Error using news_collector: {e}")
+#     
+#     # Fallback to basic RSS collection
+#     print("Using basic RSS collection...")
+#     feeds = [
+#         {"url": "https://it.donga.com/feeds/rss/", "source": "IT동아"},
+#         {"url": "https://rss.etnews.com/Section902.xml", "source": "전자신문"},
+#         {"url": "https://techcrunch.com/feed/", "source": "TechCrunch"},
+#         {"url": "https://www.theverge.com/rss/index.xml", "source": "The Verge"},
+#         {"url": "https://www.engadget.com/rss.xml", "source": "Engadget"},
+#     ]
+#     
+#     all_articles = []
+#     for feed in feeds:
+#         articles = collect_from_rss(feed["url"], feed["source"])
+#         all_articles.extend(articles)
+#     
+#     if all_articles:
+#         stats = save_articles_to_db(all_articles)
+#         return True, len(all_articles), stats
+#     
+#     return False, 0, {}
 
 # Enhanced news collection API
 @app.post("/api/collect-news")
