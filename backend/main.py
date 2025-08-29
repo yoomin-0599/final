@@ -469,7 +469,7 @@ def run_collection():
         try:
             print("Using simple news collector...")
             # Ensure DB is initialized
-            ensure_db_initialized()
+            await ensure_db_initialized() 
             
             # Import and use simple collector with current DB
             import simple_news_collector
@@ -597,7 +597,7 @@ async def collect_news_now(
                     "total_articles": total_articles,
                     "by_source": by_source,
                     "successful_feeds": result['successful_feeds'],
-                    "failed_feeds": result['failed_feeds'],
+                    "failed_feeds']: result['failed_feeds'],
                     "total_feeds": result['total_feeds'],
                     "timestamp": datetime.now().isoformat()
                 }
@@ -696,7 +696,7 @@ else:
 async def get_collections():
     """모든 컬렉션 목록을 반환합니다."""
     try:
-        ensure_db_initialized()
+        await ensure_db_initialized() 
         conn = get_db_connection()
         cursor = conn.cursor()
         
@@ -726,7 +726,7 @@ async def get_collections():
 async def create_collection(request: CollectionRequest):
     """새로운 컬렉션을 생성합니다."""
     try:
-        ensure_db_initialized()
+        await ensure_db_initialized() 
         conn = get_db_connection()
         cursor = conn.cursor()
         
@@ -794,7 +794,7 @@ async def extract_article_keywords(article_id: int):
 async def translate_article(article_id: int):
     """특정 기사를 번역합니다."""
     try:
-        ensure_db_initialized()
+        await ensure_db_initialized() 
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM articles WHERE id = ?", (article_id,))

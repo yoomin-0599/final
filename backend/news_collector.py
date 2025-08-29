@@ -90,7 +90,6 @@ FEEDS: List[Dict[str, str]] = [
 
     # --- Global (en) ---
     {"feed_url": "https://techcrunch.com/feed/",               "source": "TechCrunch",          "category": "Tech",         "lang": "en"},
-    {"feed_url": "https://www.eetimes.com/feed/",              "source": "EE Times",            "category": "Electronics",  "lang": "en"},
     {"feed_url": "https://spectrum.ieee.org/rss/fulltext",     "source": "IEEE Spectrum",       "category": "Engineering",  "lang": "en"},
     {"feed_url": "http://export.arxiv.org/rss/cs",             "source": "arXiv CS",            "category": "Research",     "lang": "en"},
     {"feed_url": "https://www.nature.com/nel/atom.xml",        "source": "Nature Electronics",  "category": "Research",     "lang": "en"},
