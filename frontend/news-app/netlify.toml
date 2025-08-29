@@ -9,4 +9,4 @@
 
 [build.environment]
   NODE_VERSION = "18"
-  VITE_API_URL = "https://streamlit-04.onrender.com"
+  VITE_API_URL = "https://streamlit-04-j6ho.onrender.com"

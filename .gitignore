@@ -5,3 +5,6 @@ archive_last_year.jsonl
 news.db
 http_cache.sqlite
 http_cache_archive.sqlite
+node_modules
+/package.json
+/package-lock.json

@@ -74,7 +74,7 @@ class NewsService {
   private readonly STORAGE_KEY = 'news_articles';
   private readonly LAST_UPDATE_KEY = 'news_last_update';
   private readonly CACHE_DURATION = 30 * 60 * 1000; // 30분 캐시
-  private autoRefreshInterval: number | null = null;
+  private autoRefreshInterval: any = null;
 
   constructor() {
     this.loadFromStorage();
