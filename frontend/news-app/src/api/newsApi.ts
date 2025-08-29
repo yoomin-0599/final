@@ -127,7 +127,7 @@ export const newsApi = {
       
       const response = await api.post('/api/collect-news-now', null, { 
         params,
-        timeout: 60000 // 60 second timeout for collection
+        timeout: 300000 // 300 second timeout for collection
       });
       
       console.log('📡 API response:', response.data);
